@@ -4,10 +4,38 @@ use derivative::Derivative;
 
 use crate::lya::mda::{DeBrujin, Lam};
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""))]
+#[derivative(Clone(bound = "R: Clone"))]
 pub enum EvalValue<'a, R, E> {
-    Value(Rc<R>),
+    Value(R),
     Func(Rc<dyn Fn(EvalValue<'a, R, E>) -> EvalResult<R, E> + 'a>),
+}
+
+impl <A, E> From<A> for EvalValue<'_, A, E> {
+    fn from(x: A) -> Self {
+        EvalValue::Value(x)
+    }
+}
+
+impl<'a, R, E> EvalValue<'a, R, E> {
+    pub fn func(f: impl Fn(EvalValue<'a, R, E>) -> EvalResult<R, E> + 'a) -> EvalValue<'a, R, E> {
+        Self::Func(Rc::new(f))
+    }
+
+    pub fn as_value(self) -> Result<R, EvalError<E>> {
+        match self {
+            EvalValue::Value(x) => Ok(x),
+            EvalValue::Func(_) => Err(EvalError::NotAValue),
+        }
+    }
+
+    pub fn as_func<'b: 'a>(
+        &'b self,
+    ) -> Result<&'b dyn Fn(EvalValue<'a, R, E>) -> EvalResult<R, E>, EvalError<E>> {
+        match self {
+            EvalValue::Value(_) => Err(EvalError::NotAFunction),
+            EvalValue::Func(f) => Ok(f.as_ref()),
+        }
+    }
 }
 
 pub enum EvalError<E> {
@@ -16,8 +44,15 @@ pub enum EvalError<E> {
     NotAValue,
     NotFound(usize),
 }
-trait Evaluate {
-    type Value;
+
+impl<E> From<E> for EvalError<E> {
+    fn from(e: E) -> Self {
+        EvalError::Error(e)
+    }
+}
+
+pub trait Evaluate {
+    type Value: Clone;
     type Error;
     fn eval<'a>(
         &'a self,
@@ -27,11 +62,11 @@ trait Evaluate {
 
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""))]
-struct EvalCtx<'a, R, E> {
+pub struct EvalCtx<'a, R, E> {
     vars: Rc<Vec<EvalValue<'a, R, E>>>,
 }
 
-impl<'a, R, E> EvalCtx<'a, R, E> {
+impl<'a, R: Clone, E> EvalCtx<'a, R, E> {
     fn pushed<'b>(&'b self, v: EvalValue<'a, R, E>) -> EvalCtx<'a, R, E> {
         let vars: &Vec<_> = self.vars.borrow();
         let mut vars = vars.clone();
