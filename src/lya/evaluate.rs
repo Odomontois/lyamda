@@ -222,4 +222,13 @@ mod test {
         let res = ch.zero.app(num(0)).app(adder(1)).evaluate();
         println!("{res:?}");
     }
+
+    #[test]
+    fn church_three(){
+        let ch = church();
+        let res =  (ch.from_u64)(3).app(num(0)).app(adder(1)).evaluate();
+        println!("{res:?}");
+    }
+
+
 }
