@@ -1,10 +1,13 @@
-use std::{borrow::Borrow, rc::Rc};
+use std::{borrow::Borrow, fmt::Debug, rc::Rc};
 
 use derivative::Derivative;
 use derive_more::From;
 use thiserror::Error;
 
-use super::{debrujin::DeBrujin, mda::Lam};
+use super::{
+    debrujin::{DeBrujin, Use},
+    mda::Lam,
+};
 #[derive(Derivative, From)]
 #[derivative(Clone(bound = "R: Clone"), Debug)]
 pub enum EvalValue<R, E> {
@@ -57,7 +60,7 @@ pub trait Evaluate {
     }
 }
 
-#[derive(Derivative)]
+#[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
 pub struct EvalCtx<R, E> {
     vars: Rc<Vec<EvalValue<R, E>>>,
@@ -75,23 +78,32 @@ impl<'a, R: Clone, E> EvalCtx<R, E> {
 
 pub type EvalResult<R, E> = Result<EvalValue<R, E>, EvalError<E>>;
 
-impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
+impl<Ext: Evaluate + Debug + 'static, Ty: Debug + 'static> Evaluate for Lam<DeBrujin, Ty, Ext>
+where
+    Ext::Error: Debug,
+    Ext::Value: Debug,
+{
     type Value = Ext::Value;
     type Error = Ext::Error;
     fn eval<'a>(
         &'a self,
         ctx: EvalCtx<Self::Value, Self::Error>,
     ) -> EvalResult<Self::Value, Self::Error> {
-        match self {
-            Lam::Var(i) => ctx
+        println!("evaluating: {:?}", self);
+        let res = match self {
+            Lam::Var(Use(i)) => ctx
                 .vars
-                .get(*i)
+                .get(ctx.vars.len() - *i - 1)
                 .cloned()
                 .ok_or_else(|| EvalError::NotFound(*i)),
+
             Lam::Abs(_, _, exp) => {
                 let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
                 let ctx = ctx.clone();
-                Ok(EvalValue::Func(Rc::new(move |v| exp.eval(ctx.pushed(v)))))
+                Ok(EvalValue::Func(Rc::new(move |v| {
+                    println!("running inner function {exp:?} context {ctx:?} with  {v:?}");
+                    exp.eval(ctx.pushed(v))
+                })))
             }
 
             Lam::App(f, a) => {
@@ -102,7 +114,9 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
                 }
             }
             Lam::Ext(e) => e.eval(ctx),
-        }
+        };
+        println!("evaluated: {:?} -> {:?}", self, res);
+        res
     }
 }
 
@@ -135,6 +149,10 @@ mod test {
 
     fn dlam(x: &'static str, body: IntLam) -> IntLam {
         Lam::dlam(x, body)
+    }
+
+    fn num(n: u64) -> IntLam {
+        Num(n).into()
     }
 
     #[test]
@@ -192,9 +210,16 @@ mod test {
     }
 
     #[test]
-    fn churches() {
+    fn simple() {
+        let f = dlam("x", dlam("y", Var("y"))).app(num(1)).app(num(2));
+        let res = f.evaluate();
+        print!("{res:?}")
+    }
+
+    #[test]
+    fn church_zero(){
         let ch = church();
-        let res = (ch.to_uint)(ch.zero).to_debrujin().unwrap();
-        print!("{res}")
+        let res = ch.zero.app(num(0)).app(adder(1)).evaluate();
+        println!("{res:?}");
     }
 }

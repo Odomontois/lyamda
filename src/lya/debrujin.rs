@@ -1,19 +1,30 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Display,
     hash::Hash,
 };
 
 use derivative::Derivative;
 use thiserror::Error;
 
-use super::mda::{Lam, Named, VarName, Star};
+use super::mda::{Lam, Named, Star, VarName};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DeBrujin {}
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Use(pub usize);
+
+impl Display for Use {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let i = self.0;
+        write!(f, "[{i}]")
+    }
+}
+
 impl VarName for DeBrujin {
     type Decl = Star;
-    type Use = usize;
+    type Use = Use;
 }
 
 #[derive(Derivative)]
@@ -52,7 +63,7 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
             Lam::Var(k) => self
                 .var_depth
                 .get(&k)
-                .map(|&d| Lam::Var(self.vars.len() - d))
+                .map(|&d| Lam::Var(Use(self.vars.len() - d - 1)))
                 .or_else(|| {
                     self.not_found.insert(k.clone());
                     None

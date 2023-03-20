@@ -1,4 +1,9 @@
-use std::{fmt::Display, hash::Hash, marker::PhantomData, rc::Rc};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+    marker::PhantomData,
+    rc::Rc,
+};
 
 use super::{
     debrujin::{DeBrujin, DeBrujinCtx, NotFoundError},
@@ -99,8 +104,14 @@ impl<Ty: Clone + 'static, Ext: Clone + 'static, K: Hash + Eq + Clone> Lam<Named<
     }
 }
 
-impl<Ty: Clone + 'static, Ext: Clone + Evaluate + 'static, K: Hash + Eq + Clone>
-    Lam<Named<K>, Ty, Ext>
+impl<
+        Ty: Clone + Debug + 'static,
+        Ext: Debug + Clone + Evaluate + 'static,
+        K: Hash + Eq + Clone,
+    > Lam<Named<K>, Ty, Ext>
+where
+    Ext::Value: Debug,
+    Ext::Error: Debug,
 {
     pub fn evaluate(&self) -> LamResEval<K, Ext> {
         let d = self.to_debrujin()?;
