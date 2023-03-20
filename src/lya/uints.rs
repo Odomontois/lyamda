@@ -1,4 +1,5 @@
 use super::evaluate::{EvalCtx, EvalResult, EvalValue, Evaluate};
+use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Op {
@@ -46,9 +47,13 @@ impl UIntRes {
     }
 }
 
+#[derive(Error, Debug)]
 pub enum ArithmeticError {
+    #[error("division by zero")]
     DivideByZero,
+    #[error("operation overflow")]
     Overflow,
+    #[error("argument was not a number")]
     NotANumber,
 }
 
@@ -58,17 +63,17 @@ impl Evaluate for UIntExt {
 
     fn eval<'a>(
         &'a self,
-        _ctx: EvalCtx<'a, Self::Value, Self::Error>,
-    ) -> EvalResult<'a, Self::Value, Self::Error> {
-        Ok(match self {
-            UIntExt::Num(x) => EvalValue::Value(UIntRes::Num(*x)),
+        _ctx: EvalCtx<Self::Value, Self::Error>,
+    ) -> EvalResult<Self::Value, Self::Error> {
+        Ok(match *self {
+            UIntExt::Num(x) => EvalValue::Value(UIntRes::Num(x)),
             UIntExt::Op(op) => EvalValue::func(|x: EvalValue<Self::Value, _>| {
                 let x = x.as_value()?.as_num()?;
-                Ok(UIntRes::Curried(*op, x).into())
+                Ok(UIntRes::Curried(op, x).into())
             }),
             UIntExt::Curried(op, x) => EvalValue::func(|y: EvalValue<UIntRes, _>| {
                 let y = y.as_value()?.as_num()?;
-                let z = op.apply(*x, y)?;
+                let z = op.apply(x, y)?;
                 Ok(EvalValue::Value(UIntRes::Num(z)))
             }),
         })
