@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 derivative = "2.2.0"
+thiserror = "1.0.40"
+derive_more = "0.99.17"

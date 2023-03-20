@@ -1,23 +1,23 @@
 use std::{borrow::Borrow, rc::Rc};
 
 use derivative::Derivative;
+use thiserror::Error;
+use derive_more::From;
 
-use crate::lya::mda::{DeBrujin, Lam};
-#[derive(Derivative)]
+use super::{
+    debrujin::DeBrujin,
+    mda::{Lam},
+};
+#[derive(Derivative, From)]
 #[derivative(Clone(bound = "R: Clone"))]
-pub enum EvalValue<'a, R, E> {
+pub enum EvalValue<R, E> {
+    #[from]
     Value(R),
-    Func(Rc<dyn Fn(EvalValue<'a, R, E>) -> EvalResult<R, E> + 'a>),
+    Func(Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
 }
 
-impl <A, E> From<A> for EvalValue<'_, A, E> {
-    fn from(x: A) -> Self {
-        EvalValue::Value(x)
-    }
-}
-
-impl<'a, R, E> EvalValue<'a, R, E> {
-    pub fn func(f: impl Fn(EvalValue<'a, R, E>) -> EvalResult<R, E> + 'a) -> EvalValue<'a, R, E> {
+impl<R, E> EvalValue<R, E> {
+    pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
         Self::Func(Rc::new(f))
     }
 
@@ -28,9 +28,9 @@ impl<'a, R, E> EvalValue<'a, R, E> {
         }
     }
 
-    pub fn as_func<'b: 'a>(
+    pub fn as_func<'b>(
         &'b self,
-    ) -> Result<&'b dyn Fn(EvalValue<'a, R, E>) -> EvalResult<R, E>, EvalError<E>> {
+    ) -> Result<&'b dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>, EvalError<E>> {
         match self {
             EvalValue::Value(_) => Err(EvalError::NotAFunction),
             EvalValue::Func(f) => Ok(f.as_ref()),
@@ -38,36 +38,36 @@ impl<'a, R, E> EvalValue<'a, R, E> {
     }
 }
 
+#[derive(Error, Debug)]
 pub enum EvalError<E> {
-    Error(E),
+    Error(#[from] E),
     NotAFunction,
     NotAValue,
     NotFound(usize),
 }
 
-impl<E> From<E> for EvalError<E> {
-    fn from(e: E) -> Self {
-        EvalError::Error(e)
+pub trait Evaluate {
+    type Value: Clone + 'static;
+    type Error: 'static;
+
+    fn eval<'a>(
+        &'a self,
+        ctx: EvalCtx<Self::Value, Self::Error>,
+    ) -> EvalResult<Self::Value, Self::Error>;
+
+    fn evaluate(&self) -> EvalResult<Self::Value, Self::Error> {
+        self.eval(EvalCtx::default())
     }
 }
 
-pub trait Evaluate {
-    type Value: Clone;
-    type Error;
-    fn eval<'a>(
-        &'a self,
-        ctx: EvalCtx<'a, Self::Value, Self::Error>,
-    ) -> EvalResult<'a, Self::Value, Self::Error>;
-}
-
 #[derive(Derivative)]
-#[derivative(Clone(bound = ""))]
-pub struct EvalCtx<'a, R, E> {
-    vars: Rc<Vec<EvalValue<'a, R, E>>>,
+#[derivative(Clone(bound = ""), Default(bound = ""))]
+pub struct EvalCtx<R, E> {
+    vars: Rc<Vec<EvalValue<R, E>>>,
 }
 
-impl<'a, R: Clone, E> EvalCtx<'a, R, E> {
-    fn pushed<'b>(&'b self, v: EvalValue<'a, R, E>) -> EvalCtx<'a, R, E> {
+impl<'a, R: Clone, E> EvalCtx<R, E> {
+    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> EvalCtx<R, E> {
         let vars: &Vec<_> = self.vars.borrow();
         let mut vars = vars.clone();
         vars.push(v);
@@ -76,23 +76,23 @@ impl<'a, R: Clone, E> EvalCtx<'a, R, E> {
     }
 }
 
-pub type EvalResult<'a, R, E> = Result<EvalValue<'a, R, E>, EvalError<E>>;
+pub type EvalResult<R, E> = Result<EvalValue<R, E>, EvalError<E>>;
 
-impl<Ext: Evaluate, Ty> Evaluate for Lam<DeBrujin, Ty, Ext> {
+impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
     type Value = Ext::Value;
     type Error = Ext::Error;
     fn eval<'a>(
         &'a self,
-        ctx: EvalCtx<'a, Self::Value, Self::Error>,
-    ) -> EvalResult<'a, Self::Value, Self::Error> {
+        ctx: EvalCtx<Self::Value, Self::Error>,
+    ) -> EvalResult<Self::Value, Self::Error> {
         match self {
             Lam::Var(i) => ctx
                 .vars
                 .get(*i)
                 .cloned()
                 .ok_or_else(|| EvalError::NotFound(*i)),
-            Lam::Abs((), _, exp) => {
-                let exp: &'a Box<Lam<DeBrujin, Ty, Ext>> = exp;
+            Lam::Abs(_, _, exp) => {
+                let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
                 let ctx = ctx.clone();
                 Ok(EvalValue::Func(Rc::new(move |v| exp.eval(ctx.pushed(v)))))
             }
@@ -106,5 +106,21 @@ impl<Ext: Evaluate, Ty> Evaluate for Lam<DeBrujin, Ty, Ext> {
             }
             Lam::Ext(e) => e.eval(ctx),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::lya::{
+        mda::{Lam, Named},
+        uints::UIntExt,
+    };
+
+    type IntLam = Lam<Named<&'static str>, (), UIntExt>;
+
+    #[test]
+    fn num1() {
+        let l: IntLam = UIntExt::Num(1).into();
+        todo!()
     }
 }
