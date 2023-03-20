@@ -1,19 +1,16 @@
 use std::{borrow::Borrow, rc::Rc};
 
 use derivative::Derivative;
-use thiserror::Error;
 use derive_more::From;
+use thiserror::Error;
 
-use super::{
-    debrujin::DeBrujin,
-    mda::{Lam},
-};
+use super::{debrujin::DeBrujin, mda::Lam};
 #[derive(Derivative, From)]
-#[derivative(Clone(bound = "R: Clone"))]
+#[derivative(Clone(bound = "R: Clone"), Debug)]
 pub enum EvalValue<R, E> {
     #[from]
     Value(R),
-    Func(Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
+    Func(#[derivative(Debug = "ignore")] Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
 }
 
 impl<R, E> EvalValue<R, E> {
@@ -121,6 +118,7 @@ mod test {
     #[test]
     fn num1() {
         let l: IntLam = UIntExt::Num(1).into();
-        todo!()
+        let res = l.evaluate();
+        println!("{res:?}");
     }
 }

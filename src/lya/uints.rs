@@ -26,13 +26,14 @@ impl Op {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum UIntExt {
     Num(u64),
     Op(Op),
     Curried(Op, u64),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum UIntRes {
     Num(u64),
     Curried(Op, u64),
@@ -67,11 +68,11 @@ impl Evaluate for UIntExt {
     ) -> EvalResult<Self::Value, Self::Error> {
         Ok(match *self {
             UIntExt::Num(x) => EvalValue::Value(UIntRes::Num(x)),
-            UIntExt::Op(op) => EvalValue::func(|x: EvalValue<Self::Value, _>| {
+            UIntExt::Op(op) => EvalValue::func(move |x: EvalValue<Self::Value, _>| {
                 let x = x.as_value()?.as_num()?;
                 Ok(UIntRes::Curried(op, x).into())
             }),
-            UIntExt::Curried(op, x) => EvalValue::func(|y: EvalValue<UIntRes, _>| {
+            UIntExt::Curried(op, x) => EvalValue::func(move |y: EvalValue<UIntRes, _>| {
                 let y = y.as_value()?.as_num()?;
                 let z = op.apply(x, y)?;
                 Ok(EvalValue::Value(UIntRes::Num(z)))

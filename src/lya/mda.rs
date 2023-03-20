@@ -57,8 +57,10 @@ pub enum EvalRunError<K, E> {
     Eval(#[from] EvalError<E>),
 }
 
-pub type LamEvalRes<K, Ext: Evaluate> =
-    Result<EvalValue<Ext::Value, Ext::Error>, EvalRunError<K, Ext::Error>>;
+pub type LamEvalRes<K, Ext> = Result<
+    EvalValue<<Ext as Evaluate>::Value, <Ext as Evaluate>::Error>,
+    EvalRunError<K, <Ext as Evaluate>::Error>,
+>;
 
 impl<Ty: Clone + 'static, Ext: Clone + 'static, K: Hash + Eq + Clone> Lam<Named<K>, Ty, Ext> {
     pub fn to_debrujin(&self) -> Result<Lam<DeBrujin, Ty, Ext>, HashSet<K>> {
