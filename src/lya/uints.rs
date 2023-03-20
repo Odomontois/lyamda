@@ -30,22 +30,6 @@ impl Op {
 pub enum UIntExt {
     Num(u64),
     Op(Op),
-    Curried(Op, u64),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum UIntRes {
-    Num(u64),
-    Curried(Op, u64),
-}
-
-impl UIntRes {
-    pub fn as_num(self) -> Result<u64, ArithmeticError> {
-        match self {
-            UIntRes::Num(x) => Ok(x),
-            UIntRes::Curried(_, _) => Err(ArithmeticError::NotANumber),
-        }
-    }
 }
 
 #[derive(Error, Debug)]
@@ -60,22 +44,22 @@ pub enum ArithmeticError {
 
 impl Evaluate for UIntExt {
     type Error = ArithmeticError;
-    type Value = UIntRes;
+    type Value = u64;
 
     fn eval<'a>(
         &'a self,
         _ctx: EvalCtx<Self::Value, Self::Error>,
     ) -> EvalResult<Self::Value, Self::Error> {
         Ok(match *self {
-            UIntExt::Num(x) => EvalValue::Value(UIntRes::Num(x)),
+            UIntExt::Num(x) => EvalValue::Value(x),
             UIntExt::Op(op) => EvalValue::func(move |x: EvalValue<Self::Value, _>| {
-                let x = x.as_value()?.as_num()?;
-                Ok(UIntRes::Curried(op, x).into())
-            }),
-            UIntExt::Curried(op, x) => EvalValue::func(move |y: EvalValue<UIntRes, _>| {
-                let y = y.as_value()?.as_num()?;
-                let z = op.apply(x, y)?;
-                Ok(EvalValue::Value(UIntRes::Num(z)))
+                let x = x.as_value()?;
+
+                Ok(EvalValue::func(move |y: EvalValue<Self::Value, _>| {
+                    let y = y.as_value()?;
+                    let z = op.apply(x, y)?;
+                    Ok(EvalValue::Value(z))
+                }))
             }),
         })
     }

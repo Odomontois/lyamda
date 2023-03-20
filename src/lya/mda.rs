@@ -44,8 +44,8 @@ impl<Name: VarName, Ty, Ext> Lam<Name, Ty, Ext> {
     }
 
     pub fn app(
-        f: impl Into<Rc<Lam<Name, Ty, Ext>>>,
-        arg: impl Into<Rc<Lam<Name, Ty, Ext>>>,
+        f: Lam<Name, Ty, Ext>,
+        arg: Lam<Name, Ty, Ext>,
     ) -> Self {
         Lam::App(f.into(), arg.into())
     }

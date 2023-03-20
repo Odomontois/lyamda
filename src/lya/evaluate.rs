@@ -110,14 +110,30 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
 mod test {
     use crate::lya::{
         mda::{Lam, Named},
-        uints::UIntExt,
+        uints::{Op, UIntExt},
     };
+    use Op::*;
+    use UIntExt::*;
 
     type IntLam = Lam<Named<&'static str>, (), UIntExt>;
 
     #[test]
     fn num1() {
         let l: IntLam = UIntExt::Num(1).into();
+        let res = l.evaluate();
+        println!("{res:?}");
+    }
+
+    #[test]
+    fn num1_half() {
+        let l: IntLam = Lam::app(Op(Add).into(), Num(1).into()).into();
+        let res = l.evaluate();
+        println!("{res:?}");
+    }
+
+    #[test]
+    fn num2() {
+        let l: IntLam = Lam::app(Lam::app(Op(Add).into(), Num(1).into()), Num(2).into()).into();
         let res = l.evaluate();
         println!("{res:?}");
     }
