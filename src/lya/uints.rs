@@ -55,7 +55,7 @@ impl Display for UIntExt {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum ArithmeticError {
     #[error("division by zero")]
     DivideByZero,

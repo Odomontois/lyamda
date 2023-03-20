@@ -38,7 +38,7 @@ impl<R, E> EvalValue<R, E> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum EvalError<E> {
     Error(#[from] E),
     NotAFunction,
@@ -89,7 +89,6 @@ where
         &'a self,
         ctx: EvalCtx<Self::Value, Self::Error>,
     ) -> EvalResult<Self::Value, Self::Error> {
-        println!("evaluating: {:?}", self);
         let res = match self {
             Lam::Var(Use(i)) => ctx
                 .vars
@@ -100,10 +99,7 @@ where
             Lam::Abs(_, _, exp) => {
                 let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
                 let ctx = ctx.clone();
-                Ok(EvalValue::Func(Rc::new(move |v| {
-                    println!("running inner function {exp:?} context {ctx:?} with  {v:?}");
-                    exp.eval(ctx.pushed(v))
-                })))
+                Ok(EvalValue::Func(Rc::new(move |v| exp.eval(ctx.pushed(v)))))
             }
 
             Lam::App(f, a) => {
@@ -115,7 +111,6 @@ where
             }
             Lam::Ext(e) => e.eval(ctx),
         };
-        println!("evaluated: {:?} -> {:?}", self, res);
         res
     }
 }
@@ -158,8 +153,8 @@ mod test {
     #[test]
     fn num2() {
         let l: IntLam = Lam::app(Lam::app(Op(Add).into(), Num(1).into()), Num(2).into()).into();
-        let res = l.evaluate();
-        println!("{res:?}");
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 3);
     }
 
     fn adder(n: u64) -> IntLam {
@@ -177,25 +172,45 @@ mod test {
     }
 
     fn church() -> Church<IntLam> {
-        Church {
-            zero: dlam("z", dlam("s", Var("z"))),
-            succ: dlam(
-                "x",
+        let succ = dlam(
+            "x",
+            dlam(
+                "s",
+                dlam("z", Var("s").app(Var("x").app(Var("s")).app(Var("z")))),
+            ),
+        );
+        let add = dlam(
+            "x",
+            dlam(
+                "y",
                 dlam(
-                    "z",
-                    dlam("s", Var("s").app(Var("x").app(Var("z")).app(Var("s")))),
+                    "s",
+                    dlam(
+                        "z",
+                        Var("x")
+                            .app(Var("s"))
+                            .app(Var("y").app(Var("s")).app(Var("z"))),
+                    ),
                 ),
             ),
-            add: Var("todo"),
-            mul: Var("todo"),
-            from_u64: Box::new(|n| {
-                let mut l = Var("z");
-                for _ in 0..n {
-                    l = Var("s").app(l);
-                }
-                dlam("z", dlam("s", l))
-            }),
-            to_uint: Box::new(|l| l.app(Num(0).into()).app(adder(1))),
+        );
+        let from_u64 = Box::new(|n| {
+            let mut l = Var("z");
+            for _ in 0..n {
+                l = Var("s").app(l);
+            }
+            dlam("s", dlam("z", l))
+        });
+        let zero = dlam("s", dlam("z", Var("z")));
+        let mul = Var("todo");
+        let to_uint = Box::new(|l: IntLam| l.app(adder(1)).app(Num(0).into()));
+        Church {
+            succ,
+            add,
+            zero,
+            mul,
+            from_u64,
+            to_uint,
         }
     }
 
@@ -206,29 +221,77 @@ mod test {
             l = adder(1).app(l);
         }
         let l = l.evaluate_to_value().unwrap();
-        println!("{l:?}");
+        assert_eq!(l, 72);
     }
 
     #[test]
     fn simple() {
+        let f = dlam("x", dlam("y", Var("x"))).app(num(1)).app(num(2));
+        let res = f.evaluate_to_value().unwrap();
+        assert_eq!(res, 1);
+
         let f = dlam("x", dlam("y", Var("y"))).app(num(1)).app(num(2));
-        let res = f.evaluate();
-        print!("{res:?}")
+        let res = f.evaluate_to_value().unwrap();
+        assert_eq!(res, 2);
     }
 
     #[test]
-    fn church_zero(){
+    fn church_zero() {
         let ch = church();
-        let res = ch.zero.app(num(0)).app(adder(1)).evaluate();
-        println!("{res:?}");
+        let res = ch
+            .zero
+            .app(adder(1))
+            .app(num(0))
+            .evaluate_to_value()
+            .unwrap();
+        assert_eq!(res, 0);
     }
 
     #[test]
-    fn church_three(){
+    fn church_three() {
         let ch = church();
-        let res =  (ch.from_u64)(3).app(num(0)).app(adder(1)).evaluate();
-        println!("{res:?}");
+        let res = (ch.from_u64)(3)
+            .app(adder(1))
+            .app(num(0))
+            .evaluate_to_value()
+            .unwrap();
+        assert_eq!(res, 3);
     }
 
+    #[test]
+    fn church_four() {
+        let ch = church();
+        let res = ch
+            .succ
+            .app((ch.from_u64)(3))
+            .app(adder(1))
+            .app(num(0))
+            .evaluate_to_value()
+            .unwrap();
+        assert_eq!(res, 4)
+    }
 
+    #[test]
+    fn church_add() {
+        let ch = church();
+        let l = (ch.to_uint)(ch.add.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 7);
+        let l = (ch.to_uint)(ch.add.app((ch.from_u64)(333)).app((ch.from_u64)(444)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 777);
+    }
+
+    #[test]
+    fn church_alt_add() {
+        let ch = church();
+        let alt_add = dlam("x", dlam("y", Var("x").app(ch.succ).app(Var("y"))));
+        let l = (ch.to_uint)(alt_add.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 7);
+
+        let l = (ch.to_uint)(alt_add.app((ch.from_u64)(333)).app((ch.from_u64)(444 )));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 777);
+    }
 }

@@ -36,7 +36,7 @@ pub struct DeBrujinCtx<S> {
     not_found: HashSet<S>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub struct NotFoundError<S>(Vec<S>);
 
 impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {

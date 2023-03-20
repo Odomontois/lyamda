@@ -84,7 +84,7 @@ impl<Name: VarName, Ty, Ext> Lam<Name, Ty, Ext> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum EvalRunError<K, E> {
     NotFound(#[from] NotFoundError<K>),
     Eval(#[from] EvalError<E>),
