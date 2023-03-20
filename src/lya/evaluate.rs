@@ -167,6 +167,7 @@ mod test {
         succ: A,
         add: A,
         mul: A,
+        pow: A,
         from_u64: Box<dyn Fn(u64) -> A>,
         to_uint: Box<dyn Fn(A) -> A>,
     }
@@ -202,13 +203,18 @@ mod test {
             dlam("s", dlam("z", l))
         });
         let zero = dlam("s", dlam("z", Var("z")));
-        let mul = Var("todo");
+        let pow = dlam("x", dlam("y", Var("y").app(Var("x"))));
+        let mul = dlam(
+            "x",
+            dlam("y", dlam("s", Var("x").app(Var("y").app(Var("s"))))),
+        );
         let to_uint = Box::new(|l: IntLam| l.app(adder(1)).app(Num(0).into()));
         Church {
             succ,
             add,
             zero,
             mul,
+            pow,
             from_u64,
             to_uint,
         }
@@ -233,6 +239,11 @@ mod test {
         let f = dlam("x", dlam("y", Var("y"))).app(num(1)).app(num(2));
         let res = f.evaluate_to_value().unwrap();
         assert_eq!(res, 2);
+
+        let id = dlam("x", Var("x"));
+        let uu = dlam("x", id.clone().app(Var("x"))).app(id).app(num(42));
+        let res = uu.evaluate_to_value().unwrap();
+        assert_eq!(res, 42);
     }
 
     #[test]
@@ -290,8 +301,36 @@ mod test {
         let res = l.evaluate_to_value().unwrap();
         assert_eq!(res, 7);
 
-        let l = (ch.to_uint)(alt_add.app((ch.from_u64)(333)).app((ch.from_u64)(444 )));
+        let l = (ch.to_uint)(alt_add.app((ch.from_u64)(333)).app((ch.from_u64)(444)));
         let res = l.evaluate_to_value().unwrap();
         assert_eq!(res, 777);
     }
+
+    #[test]
+    fn church_mul() {
+        let ch = church();
+        let l = (ch.to_uint)(ch.mul.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 12);
+
+        let l = (ch.to_uint)(ch.mul.clone().app((ch.from_u64)(33)).app((ch.from_u64)(44)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 1452);
+    }
+
+    #[test]
+    fn church_alt_mul() {
+        let ch = church();
+        let alt_mul = dlam(
+            "x",
+            dlam("y", Var("x").app(ch.add.app(Var("y"))).app(ch.zero)),
+        );
+        let l = (ch.to_uint)(alt_mul.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+
+        let l = (ch.to_uint)(alt_mul.app((ch.from_u64)(33)).app((ch.from_u64)(44)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 1452);
+    }
+
+    
 }

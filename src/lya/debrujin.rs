@@ -32,7 +32,7 @@ impl VarName for DeBrujin {
 
 pub struct DeBrujinCtx<S> {
     vars: Vec<S>,
-    var_depth: HashMap<S, usize>,
+    var_depth: HashMap<S, Vec<usize>>,
     not_found: HashSet<S>,
 }
 
@@ -41,14 +41,22 @@ pub struct NotFoundError<S>(Vec<S>);
 
 impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
     fn push(&mut self, k: K) {
-        self.var_depth.insert(k.clone(), self.vars.len());
+        self.var_depth
+            .entry(k.clone())
+            .or_insert(vec![])
+            .push(self.vars.len());
         self.vars.push(k);
     }
 
-    fn pop(&mut self) {
-        if let Some(k) = self.vars.pop() {
-            self.var_depth.remove(&k);
-        }
+    fn get(&self, k: &K) -> Option<usize> {
+        let v = self.var_depth.get(k)?;
+        v.last().copied()
+    }
+
+    fn pop(&mut self) -> Option<usize> {
+        let k = self.vars.pop()?;
+        let v = self.var_depth.get_mut(&k)?;
+        v.pop()
     }
 
     pub fn error(self) -> NotFoundError<K> {
@@ -61,9 +69,8 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
     ) -> Option<Lam<DeBrujin, Ty, Ext>> {
         match lam {
             Lam::Var(k) => self
-                .var_depth
                 .get(&k)
-                .map(|&d| Lam::Var(Use(self.vars.len() - d - 1)))
+                .map(|d| Lam::Var(Use(self.vars.len() - d - 1)))
                 .or_else(|| {
                     self.not_found.insert(k.clone());
                     None
