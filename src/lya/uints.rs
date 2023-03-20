@@ -1,4 +1,7 @@
+use std::fmt::Display;
+
 use super::evaluate::{EvalCtx, EvalResult, EvalValue, Evaluate};
+use derive_more::From;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -26,10 +29,30 @@ impl Op {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+impl Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Op::Add => write!(f, "+"),
+            Op::Mul => write!(f, "*"),
+            Op::Sub => write!(f, "-"),
+            Op::Div => write!(f, "/"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, From)]
 pub enum UIntExt {
     Num(u64),
     Op(Op),
+}
+
+impl Display for UIntExt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UIntExt::Num(x) => write!(f, "{x}"),
+            UIntExt::Op(op) => write!(f, "{op}"),
+        }
+    }
 }
 
 #[derive(Error, Debug)]

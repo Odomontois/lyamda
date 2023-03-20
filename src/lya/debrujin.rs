@@ -4,23 +4,29 @@ use std::{
 };
 
 use derivative::Derivative;
+use thiserror::Error;
 
-use super::mda::{Lam, Named, VarName};
+use super::mda::{Lam, Named, VarName, Star};
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DeBrujin {}
 
 impl VarName for DeBrujin {
-    type Decl = ();
+    type Decl = Star;
     type Use = usize;
 }
 
 #[derive(Derivative)]
 #[derivative(Default(bound = ""))]
+
 pub struct DeBrujinCtx<S> {
     vars: Vec<S>,
     var_depth: HashMap<S, usize>,
-    pub not_found: HashSet<S>,
+    not_found: HashSet<S>,
 }
+
+#[derive(Debug, Error)]
+pub struct NotFoundError<S>(Vec<S>);
 
 impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
     fn push(&mut self, k: K) {
@@ -32,6 +38,10 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
         if let Some(k) = self.vars.pop() {
             self.var_depth.remove(&k);
         }
+    }
+
+    pub fn error(self) -> NotFoundError<K> {
+        NotFoundError(self.not_found.into_iter().collect())
     }
 
     pub fn to_debrujin<Ty: Clone, Ext: Clone>(
@@ -51,7 +61,7 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
                 self.push(k.clone());
                 let body = self.to_debrujin(&*body)?;
                 self.pop();
-                Some(Lam::Abs((), ty.clone(), body.into()))
+                Some(Lam::Abs(Star(), ty.clone(), body.into()))
             }
             Lam::App(f, arg) => {
                 let f = self.to_debrujin(&*f);

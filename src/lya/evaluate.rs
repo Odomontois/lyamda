@@ -108,18 +108,21 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
 
 #[cfg(test)]
 mod test {
+
     use crate::lya::{
-        mda::{Lam, Named},
+        mda::{Lam, UntypedLamWith},
         uints::{Op, UIntExt},
     };
+
+    use Lam::Var;
     use Op::*;
     use UIntExt::*;
 
-    type IntLam = Lam<Named<&'static str>, (), UIntExt>;
+    type IntLam = UntypedLamWith<&'static str, UIntExt>;
 
     #[test]
     fn num1() {
-        let l: IntLam = UIntExt::Num(1).into();
+        let l: IntLam = Num(1).into();
         let res = l.evaluate();
         println!("{res:?}");
     }
@@ -127,8 +130,11 @@ mod test {
     #[test]
     fn num1_half() {
         let l: IntLam = Lam::app(Op(Add).into(), Num(1).into()).into();
-        let res = l.evaluate();
-        println!("{res:?}");
+        l.evaluate().unwrap().as_func().unwrap();
+    }
+
+    fn dlam(x: &'static str, body: IntLam) -> IntLam {
+        Lam::dlam(x, body)
     }
 
     #[test]
@@ -136,5 +142,59 @@ mod test {
         let l: IntLam = Lam::app(Lam::app(Op(Add).into(), Num(1).into()), Num(2).into()).into();
         let res = l.evaluate();
         println!("{res:?}");
+    }
+
+    fn adder(n: u64) -> IntLam {
+        Lam::app(Lam::Ext(Op(Add)), Lam::Ext(Num(n)))
+    }
+
+    #[allow(unused)]
+    struct Church<A> {
+        zero: A,
+        succ: A,
+        add: A,
+        mul: A,
+        from_u64: Box<dyn Fn(u64) -> A>,
+        to_uint: Box<dyn Fn(A) -> A>,
+    }
+
+    fn church() -> Church<IntLam> {
+        Church {
+            zero: dlam("z", dlam("s", Var("z"))),
+            succ: dlam(
+                "x",
+                dlam(
+                    "z",
+                    dlam("s", Var("s").app(Var("x").app(Var("z")).app(Var("s")))),
+                ),
+            ),
+            add: Var("todo"),
+            mul: Var("todo"),
+            from_u64: Box::new(|n| {
+                let mut l = Var("z");
+                for _ in 0..n {
+                    l = Var("s").app(l);
+                }
+                dlam("z", dlam("s", l))
+            }),
+            to_uint: Box::new(|l| l.app(Num(0).into()).app(adder(1))),
+        }
+    }
+
+    #[test]
+    fn increment_3_times() {
+        let mut l: IntLam = Num(69).into();
+        for _ in 0..3 {
+            l = adder(1).app(l);
+        }
+        let l = l.evaluate_to_value().unwrap();
+        println!("{l:?}");
+    }
+
+    #[test]
+    fn churches() {
+        let ch = church();
+        let res = (ch.to_uint)(ch.zero).to_debrujin().unwrap();
+        print!("{res}")
     }
 }
