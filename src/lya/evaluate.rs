@@ -50,7 +50,7 @@ impl<R, E> EvalValue<R, E> {
     pub fn is_func(&self) -> bool {
         match self {
             EvalValue::Value(_) => false,
-            EvalValue::Func(f) => true,
+            EvalValue::Func(_) => true,
         }
     }
 }
@@ -151,11 +151,15 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
             }
 
             Lam::App(f, a) => {
-                let v = (*a).eval(ctx.clone())?;
-                match (*f).eval(ctx)? {
-                    EvalValue::Value(_) => Err(EvalError::NotAFunction).into(),
-                    EvalValue::Func(f) => Ok(f.apply(v)?.into()),
-                }
+                let a = a.clone();
+                Ok((*f)
+                    .eval_step(ctx.clone())?
+                    .continue_with(move |f| match f {
+                        EvalValue::Value(_) => Err(EvalError::NotAFunction).into(),
+                        EvalValue::Func(f) => {
+                            Ok((*a).eval_step(ctx)?.continue_with(move |a| f.apply(a)))
+                        }
+                    }))
             }
             Lam::Ext(e) => Ok(e.eval(ctx)?.into()),
         }

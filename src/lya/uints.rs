@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::evaluate::{EvalCtx, EvalResult, EvalStepResult, EvalValue, Evaluate};
+use super::evaluate::{EvalCtx, EvalStepResult, EvalValue, Evaluate};
 use derive_more::From;
 use thiserror::Error;
 
