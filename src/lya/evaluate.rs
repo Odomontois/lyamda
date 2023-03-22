@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt::Debug, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, fmt::Debug, rc::Rc};
 
 use derivative::Derivative;
 use derive_more::From;
@@ -13,12 +13,14 @@ use super::{
 #[derivative(Clone(bound = ""))]
 pub enum EvalFunc<R, E> {
     Immut(Rc<dyn Fn(EvalValue<R, E>) -> EvalStepResult<R, E>>),
+    Mut(Rc<RefCell<dyn FnMut(EvalValue<R, E>) -> EvalStepResult<R, E>>>),
 }
 
 impl<R, E> EvalFunc<R, E> {
     fn apply(&self, x: EvalValue<R, E>) -> EvalStepResult<R, E> {
         match self {
             EvalFunc::Immut(f) => f(x),
+            EvalFunc::Mut(f) => f.borrow_mut()(x),
         }
     }
 }
@@ -34,6 +36,12 @@ pub enum EvalValue<R, E> {
 impl<R, E> EvalValue<R, E> {
     pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static) -> EvalValue<R, E> {
         Self::Func(EvalFunc::Immut(Rc::new(f)))
+    }
+
+    pub fn func_mut(
+        f: impl FnMut(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static,
+    ) -> EvalValue<R, E> {
+        Self::Func(EvalFunc::Mut(Rc::new(RefCell::new(f))))
     }
 
     pub fn val_func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
@@ -92,17 +100,55 @@ pub trait Evaluate {
 
 #[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
-pub struct EvalCtx<R, E> {
+pub struct EvalCtx1<R, E> {
     vars: Rc<Vec<EvalValue<R, E>>>,
 }
 
-impl<'a, R: Clone, E> EvalCtx<R, E> {
-    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> EvalCtx<R, E> {
+impl<'a, R: Clone, E> EvalCtx1<R, E> {
+    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
         let vars: &Vec<_> = self.vars.borrow();
         let mut vars = vars.clone();
         vars.push(v);
         let vars = Rc::new(vars);
-        EvalCtx { vars }
+        Self { vars }
+    }
+
+    fn get(&self, i: usize) -> Result<EvalValue<R, E>, EvalError<E>> {
+        let vars: &Vec<_> = self.vars.borrow();
+        vars.get(self.vars.len() - i - 1)
+            .cloned()
+            .ok_or_else(|| EvalError::NotFound(i))
+    }
+}
+
+#[derive(Derivative, Debug)]
+#[derivative(Clone(bound = ""), Default(bound = ""))]
+pub enum EvalCtx<R, E> {
+    #[derivative(Default)]
+    Empty,
+    Pushed(Rc<EvalCtx<R, E>>, Rc<EvalValue<R, E>>),
+}
+
+impl<'a, R: Clone, E> EvalCtx<R, E> {
+    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
+        Self::Pushed(Rc::new(self.clone()), v.into())
+    }
+
+    fn pop(&self, i: usize) -> Result<(&Self, &EvalValue<R, E>), EvalError<E>> {
+        match self {
+            Self::Empty => return Err(EvalError::NotFound(i)),
+            Self::Pushed(prev, v) => Ok((&*prev, &*v)),
+        }
+    }
+
+    fn get(&self, i: usize) -> Result<EvalValue<R, E>, EvalError<E>> {
+        let mut j = i;
+        let mut ctx = self;
+        while j > 0 {
+            (ctx, _) = ctx.pop(i)?;
+            j -= 1;
+        }
+        Ok(ctx.pop(i)?.1.clone())
     }
 }
 
@@ -141,12 +187,7 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
         ctx: EvalCtx<Self::Value, Self::Error>,
     ) -> EvalStepResult<Self::Value, Self::Error> {
         match self {
-            Lam::Var(Use(i)) => Ok(ctx
-                .vars
-                .get(ctx.vars.len() - *i - 1)
-                .cloned()
-                .ok_or_else(|| EvalError::NotFound(*i))?
-                .into()),
+            Lam::Var(Use(i)) => Ok(ctx.get(*i)?.into()),
 
             Lam::Abs(_, _, exp) => {
                 let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
