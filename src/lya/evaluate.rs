@@ -123,6 +123,10 @@ impl<R: 'static, E: 'static> EvalStep<R, E> {
             EvalStep::Return(v) => EvalStep::Later(Box::new(move || f(v))),
         }
     }
+
+    pub fn defer(f: impl FnOnce() -> EvalStepResult<R, E> + 'static) -> EvalStep<R, E> {
+        EvalStep::Later(Box::new(f))
+    }
 }
 
 pub type EvalStepResult<R, E> = Result<EvalStep<R, E>, EvalError<E>>;
@@ -151,15 +155,16 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
             }
 
             Lam::App(f, a) => {
+                let f = f.clone();
                 let a = a.clone();
-                Ok((*f)
-                    .eval_step(ctx.clone())?
-                    .continue_with(move |f| match f {
+                Ok(EvalStep::defer(move || {
+                    Ok(f.eval_step(ctx.clone())?.continue_with(move |f| match f {
                         EvalValue::Value(_) => Err(EvalError::NotAFunction).into(),
                         EvalValue::Func(f) => {
                             Ok((*a).eval_step(ctx)?.continue_with(move |a| f.apply(a)))
                         }
                     }))
+                }))
             }
             Lam::Ext(e) => Ok(e.eval(ctx)?.into()),
         }
