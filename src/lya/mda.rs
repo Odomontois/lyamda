@@ -82,6 +82,13 @@ impl<Name: VarName, Ty, Ext> Lam<Name, Ty, Ext> {
     pub fn app(self, arg: Lam<Name, Ty, Ext>) -> Self {
         Lam::App(self.into(), arg.into())
     }
+
+    pub fn appc(&self, arg: &Lam<Name, Ty, Ext>) -> Self
+    where
+        Self: Clone,
+    {
+        self.clone().app(arg.clone())
+    }
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]

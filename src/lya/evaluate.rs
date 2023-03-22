@@ -426,14 +426,13 @@ mod test {
     #[test]
     fn big_mul() {
         let ch = church();
+        let ten = (ch.from_u64)(10);
+        let hundred = ch.mul.appc(&ten).appc(&ten);
+        let thousand = ch.mul.appc(&hundred).appc(&ten);
+        let ten_thousands = ch.mul.appc(&thousand).appc(&ten);
 
-        let l = (ch.to_uint)(
-            ch.mul
-                .clone()
-                .app((ch.from_u64)(10000))
-                .app((ch.from_u64)(1000)),
-        );
+        let l = (ch.to_uint)(ch.mul.appc(&ten_thousands).appc(&hundred));
         let res = l.evaluate_to_value().unwrap();
-        assert_eq!(res, 10000000);
+        assert_eq!(res, 1_000_000);
     }
 }
