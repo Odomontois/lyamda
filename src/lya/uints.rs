@@ -75,10 +75,10 @@ impl Evaluate for UIntExt {
     ) -> EvalStepResult<Self::Value, Self::Error> {
         Ok(match *self {
             UIntExt::Num(x) => EvalValue::Value(x).into(),
-            UIntExt::Op(op) => EvalValue::func(move |x: EvalValue<Self::Value, _>| {
+            UIntExt::Op(op) => EvalValue::val_func(move |x: EvalValue<Self::Value, _>| {
                 let x = x.as_value()?;
 
-                Ok(EvalValue::func(move |y: EvalValue<Self::Value, _>| {
+                Ok(EvalValue::val_func(move |y: EvalValue<Self::Value, _>| {
                     let y = y.as_value()?;
                     let z = op.apply(x, y)?;
                     Ok(EvalValue::Value(z))

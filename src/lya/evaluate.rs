@@ -12,11 +12,11 @@ use super::{
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""))]
 pub enum EvalFunc<R, E> {
-    Immut(Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
+    Immut(Rc<dyn Fn(EvalValue<R, E>) -> EvalStepResult<R, E>>),
 }
 
 impl<R, E> EvalFunc<R, E> {
-    fn apply(&self, x: EvalValue<R, E>) -> EvalResult<R, E> {
+    fn apply(&self, x: EvalValue<R, E>) -> EvalStepResult<R, E> {
         match self {
             EvalFunc::Immut(f) => f(x),
         }
@@ -32,8 +32,12 @@ pub enum EvalValue<R, E> {
 }
 
 impl<R, E> EvalValue<R, E> {
-    pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
+    pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static) -> EvalValue<R, E> {
         Self::Func(EvalFunc::Immut(Rc::new(f)))
+    }
+
+    pub fn val_func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
+        Self::func(move |v| Ok(f(v)?.into()))
     }
 
     pub fn as_value(self) -> Result<R, EvalError<E>> {
@@ -143,7 +147,7 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
             Lam::Abs(_, _, exp) => {
                 let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
                 let ctx = ctx.clone();
-                Ok(EvalValue::func(move |v| exp.eval(ctx.pushed(v))).into())
+                Ok(EvalValue::func(move |v| exp.eval_step(ctx.pushed(v))).into())
             }
 
             Lam::App(f, a) => {
