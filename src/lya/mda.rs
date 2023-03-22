@@ -104,14 +104,8 @@ impl<Ty: Clone + 'static, Ext: Clone + 'static, K: Hash + Eq + Clone> Lam<Named<
     }
 }
 
-impl<
-        Ty: Clone + Debug + 'static,
-        Ext: Debug + Clone + Evaluate + 'static,
-        K: Hash + Eq + Clone,
-    > Lam<Named<K>, Ty, Ext>
-where
-    Ext::Value: Debug,
-    Ext::Error: Debug,
+impl<Ty: Clone + 'static, Ext: Clone + Evaluate + 'static, K: Hash + Eq + Clone>
+    Lam<Named<K>, Ty, Ext>
 {
     pub fn evaluate(&self) -> LamResEval<K, Ext> {
         let d = self.to_debrujin()?;

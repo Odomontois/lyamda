@@ -8,17 +8,32 @@ use super::{
     debrujin::{DeBrujin, Use},
     mda::Lam,
 };
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
+pub enum EvalFunc<R, E> {
+    Immut(Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
+}
+
+impl<R, E> EvalFunc<R, E> {
+    fn apply(&self, x: EvalValue<R, E>) -> EvalResult<R, E> {
+        match self {
+            EvalFunc::Immut(f) => f(x),
+        }
+    }
+}
+
 #[derive(Derivative, From)]
 #[derivative(Clone(bound = "R: Clone"), Debug)]
 pub enum EvalValue<R, E> {
     #[from]
     Value(R),
-    Func(#[derivative(Debug = "ignore")] Rc<dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>>),
+    Func(#[derivative(Debug = "ignore")] EvalFunc<R, E>),
 }
 
 impl<R, E> EvalValue<R, E> {
     pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
-        Self::Func(Rc::new(f))
+        Self::Func(EvalFunc::Immut(Rc::new(f)))
     }
 
     pub fn as_value(self) -> Result<R, EvalError<E>> {
@@ -28,12 +43,10 @@ impl<R, E> EvalValue<R, E> {
         }
     }
 
-    pub fn as_func<'b>(
-        &'b self,
-    ) -> Result<&'b dyn Fn(EvalValue<R, E>) -> EvalResult<R, E>, EvalError<E>> {
+    pub fn is_func(&self) -> bool {
         match self {
-            EvalValue::Value(_) => Err(EvalError::NotAFunction),
-            EvalValue::Func(f) => Ok(f.as_ref()),
+            EvalValue::Value(_) => false,
+            EvalValue::Func(f) => true,
         }
     }
 }
@@ -78,11 +91,7 @@ impl<'a, R: Clone, E> EvalCtx<R, E> {
 
 pub type EvalResult<R, E> = Result<EvalValue<R, E>, EvalError<E>>;
 
-impl<Ext: Evaluate + Debug + 'static, Ty: Debug + 'static> Evaluate for Lam<DeBrujin, Ty, Ext>
-where
-    Ext::Error: Debug,
-    Ext::Value: Debug,
-{
+impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
     type Value = Ext::Value;
     type Error = Ext::Error;
     fn eval<'a>(
@@ -99,14 +108,14 @@ where
             Lam::Abs(_, _, exp) => {
                 let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
                 let ctx = ctx.clone();
-                Ok(EvalValue::Func(Rc::new(move |v| exp.eval(ctx.pushed(v)))))
+                Ok(EvalValue::func(move |v| exp.eval(ctx.pushed(v))))
             }
 
             Lam::App(f, a) => {
                 let v = (*a).eval(ctx.clone())?;
                 match (*f).eval(ctx)? {
                     EvalValue::Value(_) => Err(EvalError::NotAFunction),
-                    EvalValue::Func(f) => (*f)(v),
+                    EvalValue::Func(f) => f.apply(v),
                 }
             }
             Lam::Ext(e) => e.eval(ctx),
@@ -139,7 +148,7 @@ mod test {
     #[test]
     fn num1_half() {
         let l: IntLam = Lam::app(Op(Add).into(), Num(1).into()).into();
-        l.evaluate().unwrap().as_func().unwrap();
+        assert!(l.evaluate().unwrap().is_func());
     }
 
     fn dlam(x: &'static str, body: IntLam) -> IntLam {
@@ -166,7 +175,9 @@ mod test {
         zero: A,
         succ: A,
         add: A,
+        alt_add: A,
         mul: A,
+        alt_mul: A,
         pow: A,
         from_u64: Box<dyn Fn(u64) -> A>,
         to_uint: Box<dyn Fn(A) -> A>,
@@ -195,6 +206,8 @@ mod test {
                 ),
             ),
         );
+        let alt_add = dlam("x", dlam("y", Var("x").app(succ.clone()).app(Var("y"))));
+
         let from_u64 = Box::new(|n| {
             let mut l = Var("z");
             for _ in 0..n {
@@ -208,12 +221,22 @@ mod test {
             "x",
             dlam("y", dlam("s", Var("x").app(Var("y").app(Var("s"))))),
         );
+
+        let alt_mul = dlam(
+            "x",
+            dlam(
+                "y",
+                Var("x").app(add.clone().app(Var("y"))).app(zero.clone()),
+            ),
+        );
         let to_uint = Box::new(|l: IntLam| l.app(adder(1)).app(Num(0).into()));
         Church {
             succ,
             add,
+            alt_add,
             zero,
             mul,
+            alt_mul,
             pow,
             from_u64,
             to_uint,
@@ -296,12 +319,16 @@ mod test {
     #[test]
     fn church_alt_add() {
         let ch = church();
-        let alt_add = dlam("x", dlam("y", Var("x").app(ch.succ).app(Var("y"))));
-        let l = (ch.to_uint)(alt_add.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+        let l = (ch.to_uint)(
+            ch.alt_add
+                .clone()
+                .app((ch.from_u64)(3))
+                .app((ch.from_u64)(4)),
+        );
         let res = l.evaluate_to_value().unwrap();
         assert_eq!(res, 7);
 
-        let l = (ch.to_uint)(alt_add.app((ch.from_u64)(333)).app((ch.from_u64)(444)));
+        let l = (ch.to_uint)(ch.alt_add.app((ch.from_u64)(333)).app((ch.from_u64)(444)));
         let res = l.evaluate_to_value().unwrap();
         assert_eq!(res, 777);
     }
@@ -326,11 +353,39 @@ mod test {
             dlam("y", Var("x").app(ch.add.app(Var("y"))).app(ch.zero)),
         );
         let l = (ch.to_uint)(alt_mul.clone().app((ch.from_u64)(3)).app((ch.from_u64)(4)));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 12);
 
         let l = (ch.to_uint)(alt_mul.app((ch.from_u64)(33)).app((ch.from_u64)(44)));
         let res = l.evaluate_to_value().unwrap();
         assert_eq!(res, 1452);
     }
 
-    
+    #[test]
+    fn church_big_mul() {
+        let ch = church();
+
+        let l = (ch.to_uint)(
+            ch.alt_mul
+                .clone()
+                .app((ch.from_u64)(3))
+                .app((ch.from_u64)(4)),
+        );
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 12);
+    }
+
+    #[test]
+    fn big_mul() {
+        let ch = church();
+
+        let l = (ch.to_uint)(
+            ch.mul
+                .clone()
+                .app((ch.from_u64)(10000))
+                .app((ch.from_u64)(1000)),
+        );
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 10000000);
+    }
 }
