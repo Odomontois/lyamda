@@ -100,11 +100,11 @@ pub trait Evaluate {
 
 #[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
-pub struct EvalCtx1<R, E> {
+pub struct EvalCtx<R, E> {
     vars: Rc<Vec<EvalValue<R, E>>>,
 }
 
-impl<'a, R: Clone, E> EvalCtx1<R, E> {
+impl<'a, R: Clone, E> EvalCtx<R, E> {
     fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
         let vars: &Vec<_> = self.vars.borrow();
         let mut vars = vars.clone();
@@ -123,13 +123,13 @@ impl<'a, R: Clone, E> EvalCtx1<R, E> {
 
 #[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
-pub enum EvalCtx<R, E> {
+pub enum EvalCtx1<R, E> {
     #[derivative(Default)]
     Empty,
-    Pushed(Rc<EvalCtx<R, E>>, Rc<EvalValue<R, E>>),
+    Pushed(Rc<Self>, Rc<EvalValue<R, E>>),
 }
 
-impl<'a, R: Clone, E> EvalCtx<R, E> {
+impl<'a, R: Clone, E> EvalCtx1<R, E> {
     fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
         Self::Pushed(Rc::new(self.clone()), v.into())
     }
