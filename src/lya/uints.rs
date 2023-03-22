@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::evaluate::{EvalCtx, EvalResult, EvalValue, Evaluate};
+use super::evaluate::{EvalCtx, EvalResult, EvalStepResult, EvalValue, Evaluate};
 use derive_more::From;
 use thiserror::Error;
 
@@ -69,12 +69,12 @@ impl Evaluate for UIntExt {
     type Error = ArithmeticError;
     type Value = u64;
 
-    fn eval<'a>(
+    fn eval_step<'a>(
         &'a self,
         _ctx: EvalCtx<Self::Value, Self::Error>,
-    ) -> EvalResult<Self::Value, Self::Error> {
+    ) -> EvalStepResult<Self::Value, Self::Error> {
         Ok(match *self {
-            UIntExt::Num(x) => EvalValue::Value(x),
+            UIntExt::Num(x) => EvalValue::Value(x).into(),
             UIntExt::Op(op) => EvalValue::func(move |x: EvalValue<Self::Value, _>| {
                 let x = x.as_value()?;
 
@@ -83,7 +83,8 @@ impl Evaluate for UIntExt {
                     let z = op.apply(x, y)?;
                     Ok(EvalValue::Value(z))
                 }))
-            }),
+            })
+            .into(),
         })
     }
 }
