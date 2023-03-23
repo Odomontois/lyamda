@@ -207,7 +207,7 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
                     }))
                 }))
             }
-            Lam::Ext(e) => Ok(e.eval(ctx)?.into()),
+            Lam::Ext(e) => Ok(e.eval_step(ctx)?.into()),
         }
     }
 }
@@ -463,17 +463,27 @@ mod test {
         assert_eq!(res, 12);
     }
 
+    fn run_big_mul(m: impl Fn(&Church<IntLam>) -> &IntLam) {
+        let ch = church();
+        let ten = (ch.from_u64)(10);
+        let hundred = m(&ch).appc(&ten).appc(&ten);
+        let thousand = m(&ch).appc(&hundred).appc(&ten);
+        let ten_thousands = m(&ch).appc(&thousand).appc(&ten);
+
+        let l = (ch.to_uint)(m(&ch).appc(&ten_thousands).appc(&hundred));
+        let res = l.evaluate_to_value().unwrap();
+        assert_eq!(res, 1_000_000);
+    }
+
     #[ignore]
     #[test]
     fn big_mul() {
-        let ch = church();
-        let ten = (ch.from_u64)(10);
-        let hundred = ch.mul.appc(&ten).appc(&ten);
-        let thousand = ch.mul.appc(&hundred).appc(&ten);
-        let ten_thousands = ch.mul.appc(&thousand).appc(&ten);
+        run_big_mul(|c| &c.mul)
+    }
 
-        let l = (ch.to_uint)(ch.mul.appc(&ten_thousands).appc(&hundred));
-        let res = l.evaluate_to_value().unwrap();
-        assert_eq!(res, 1_000_000);
+    #[ignore]
+    #[test]
+    fn big_alt_mul() {
+        run_big_mul(|c| &c.alt_mul)
     }
 }
