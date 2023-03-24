@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, cell::RefCell, fmt::Debug, rc::Rc};
+use std::{borrow::Borrow, collections::VecDeque, fmt::Debug, rc::Rc};
 
 use derivative::Derivative;
 use derive_more::From;
@@ -9,19 +9,15 @@ use super::{
     mda::Lam,
 };
 
+type EvalCont<R, E> = dyn FnOnce(EvalValue<R, E>) -> EvalStepResult<R, E>;
+
 #[derive(Derivative)]
 #[derivative(Clone(bound = ""))]
-pub enum EvalFunc<R, E> {
-    Immut(Rc<dyn Fn(EvalValue<R, E>) -> EvalStepResult<R, E>>),
-    Mut(Rc<RefCell<dyn FnMut(EvalValue<R, E>) -> EvalStepResult<R, E>>>),
-}
+pub struct EvalFunc<R, E>(Rc<dyn Fn(EvalValue<R, E>) -> EvalStepResult<R, E>>);
 
 impl<R, E> EvalFunc<R, E> {
     fn apply(&self, x: EvalValue<R, E>) -> EvalStepResult<R, E> {
-        match self {
-            EvalFunc::Immut(f) => f(x),
-            EvalFunc::Mut(f) => f.borrow_mut()(x),
-        }
+        (self.0)(x)
     }
 }
 
@@ -33,15 +29,15 @@ pub enum EvalValue<R, E> {
     Func(#[derivative(Debug = "ignore")] EvalFunc<R, E>),
 }
 
+impl<R, E> Default for EvalValue<R, E> {
+    fn default() -> Self {
+        EvalValue::Func(EvalFunc(Rc::new(|_| Err(EvalError::NotAFunction))))
+    }
+}
+
 impl<R, E> EvalValue<R, E> {
     pub fn func(f: impl Fn(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static) -> EvalValue<R, E> {
-        Self::Func(EvalFunc::Immut(Rc::new(f)))
-    }
-
-    pub fn func_mut(
-        f: impl FnMut(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static,
-    ) -> EvalValue<R, E> {
-        Self::Func(EvalFunc::Mut(Rc::new(RefCell::new(f))))
+        Self::Func(EvalFunc(Rc::new(f)))
     }
 
     pub fn val_func(f: impl Fn(EvalValue<R, E>) -> EvalResult<R, E> + 'static) -> EvalValue<R, E> {
@@ -84,13 +80,8 @@ pub trait Evaluate {
         &'a self,
         ctx: EvalCtx<Self::Value, Self::Error>,
     ) -> EvalResult<Self::Value, Self::Error> {
-        let mut step = self.eval_step(ctx)?;
-        loop {
-            match step {
-                EvalStep::Return(x) => return Ok(x),
-                EvalStep::Later(f) => step = f()?,
-            }
-        }
+        let step = self.eval_step(ctx)?;
+        step.run()
     }
 
     fn evaluate(&self) -> EvalResult<Self::Value, Self::Error> {
@@ -121,57 +112,53 @@ impl<'a, R: Clone, E> EvalCtx<R, E> {
     }
 }
 
-#[derive(Derivative, Debug)]
-#[derivative(Clone(bound = ""), Default(bound = ""))]
-pub enum EvalCtx1<R, E> {
-    #[derivative(Default)]
-    Empty,
-    Pushed(Rc<Self>, Rc<EvalValue<R, E>>),
+#[derive(Derivative)]
+#[derivative(Default(bound = ""))]
+pub struct EvalStep<R, E> {
+    focus: EvalValue<R, E>,
+    stack: Vec<Box<EvalCont<R, E>>>,
 }
 
-impl<'a, R: Clone, E> EvalCtx1<R, E> {
-    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
-        Self::Pushed(Rc::new(self.clone()), v.into())
-    }
-
-    fn pop(&self, i: usize) -> Result<(&Self, &EvalValue<R, E>), EvalError<E>> {
-        match self {
-            Self::Empty => return Err(EvalError::NotFound(i)),
-            Self::Pushed(prev, v) => Ok((&*prev, &*v)),
+impl<R, E> From<EvalValue<R, E>> for EvalStep<R, E> {
+    fn from(v: EvalValue<R, E>) -> Self {
+        Self {
+            focus: v,
+            stack: Vec::new(),
         }
     }
-
-    fn get(&self, i: usize) -> Result<EvalValue<R, E>, EvalError<E>> {
-        let mut j = i;
-        let mut ctx = self;
-        while j > 0 {
-            (ctx, _) = ctx.pop(i)?;
-            j -= 1;
-        }
-        Ok(ctx.pop(i)?.1.clone())
-    }
-}
-
-#[derive(From)]
-pub enum EvalStep<R, E> {
-    Later(Box<dyn FnOnce() -> EvalStepResult<R, E>>),
-    #[from]
-    Return(EvalValue<R, E>),
 }
 
 impl<R: 'static, E: 'static> EvalStep<R, E> {
     pub fn continue_with(
-        self,
+        mut self,
         f: impl FnOnce(EvalValue<R, E>) -> EvalStepResult<R, E> + 'static,
     ) -> EvalStep<R, E> {
-        match self {
-            EvalStep::Later(g) => EvalStep::Later(Box::new(move || Ok(g()?.continue_with(f)))),
-            EvalStep::Return(v) => EvalStep::Later(Box::new(move || f(v))),
-        }
+        self.stack.push(Box::new(f));
+        self
     }
 
     pub fn defer(f: impl FnOnce() -> EvalStepResult<R, E> + 'static) -> EvalStep<R, E> {
-        EvalStep::Later(Box::new(f))
+        EvalStep {
+            focus: EvalValue::default(),
+            stack: vec![Box::new(|_| f())],
+        }
+    }
+
+    fn run(self) -> EvalResult<R, E> {
+        let EvalStep { mut focus, stack } = self;
+        let mut actions: VecDeque<Box<EvalCont<R, E>>> = stack.into();
+        loop {
+            match actions.pop_front() {
+                Some(action) => {
+                    let step = action(focus)?;
+                    focus = step.focus;
+                    for action in step.stack.into_iter().rev() {
+                        actions.push_front(action);
+                    }
+                }
+                None => return Ok(focus),
+            }
+        }
     }
 }
 
