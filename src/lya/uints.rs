@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use super::evaluate::{EvalCtx, EvalStepResult, EvalValue, Evaluate};
+use super::evaluate::{EvalCtx, EvalStepResult, EvalValue, Evaluate, ExtError};
 use derive_more::From;
 use thiserror::Error;
 
@@ -12,20 +12,21 @@ pub enum Op {
     Div,
 }
 
+use ArithmeticError::*;
 impl Op {
-    fn apply(&self, x: u64, y: u64) -> Result<u64, ArithmeticError> {
-        match self {
-            Op::Add => x.checked_add(y).ok_or(ArithmeticError::Overflow),
-            Op::Mul => x.checked_mul(y).ok_or(ArithmeticError::Overflow),
-            Op::Sub => x.checked_sub(y).ok_or(ArithmeticError::Overflow),
+    fn apply(&self, x: u64, y: u64) -> Result<u64, ExtError<ArithmeticError>> {
+        Ok(match self {
+            Op::Add => x.checked_add(y).ok_or(Overflow),
+            Op::Mul => x.checked_mul(y).ok_or(Overflow),
+            Op::Sub => x.checked_sub(y).ok_or(Overflow),
             Op::Div => {
                 if y == 0 {
-                    Err(ArithmeticError::DivideByZero)
+                    Err(DivideByZero)
                 } else {
-                    x.checked_div(y).ok_or(ArithmeticError::Overflow)
+                    x.checked_div(y).ok_or(Overflow)
                 }
             }
-        }
+        }?)
     }
 }
 

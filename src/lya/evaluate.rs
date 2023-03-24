@@ -1,8 +1,12 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt::Debug, rc::Rc};
+mod ctx;
+
+use std::{collections::VecDeque, fmt::Debug, rc::Rc};
 
 use derivative::Derivative;
 use derive_more::From;
 use thiserror::Error;
+
+pub use self::ctx::{ContextError, EvalCtx};
 
 use super::{
     debrujin::{DeBrujin, Use},
@@ -60,11 +64,14 @@ impl<R, E> EvalValue<R, E> {
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
+pub struct ExtError<E>(#[from] E);
+
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum EvalError<E> {
-    Error(#[from] E),
+    ExtError(#[from] ExtError<E>),
     NotAFunction,
     NotAValue,
-    NotFound(usize),
+    Context(#[from] ContextError),
 }
 
 pub trait Evaluate {
@@ -86,29 +93,6 @@ pub trait Evaluate {
 
     fn evaluate(&self) -> EvalResult<Self::Value, Self::Error> {
         self.eval(EvalCtx::default())
-    }
-}
-
-#[derive(Derivative, Debug)]
-#[derivative(Clone(bound = ""), Default(bound = ""))]
-pub struct EvalCtx<R, E> {
-    vars: Rc<Vec<EvalValue<R, E>>>,
-}
-
-impl<'a, R: Clone, E> EvalCtx<R, E> {
-    fn pushed<'b>(&'b self, v: EvalValue<R, E>) -> Self {
-        let vars: &Vec<_> = self.vars.borrow();
-        let mut vars = vars.clone();
-        vars.push(v);
-        let vars = Rc::new(vars);
-        Self { vars }
-    }
-
-    fn get(&self, i: usize) -> Result<EvalValue<R, E>, EvalError<E>> {
-        let vars: &Vec<_> = self.vars.borrow();
-        vars.get(self.vars.len() - i - 1)
-            .cloned()
-            .ok_or_else(|| EvalError::NotFound(i))
     }
 }
 
@@ -457,9 +441,9 @@ mod test {
         let thousand = m(&ch).appc(&hundred).appc(&ten);
         let ten_thousands = m(&ch).appc(&thousand).appc(&ten);
 
-        let l = (ch.to_uint)(m(&ch).appc(&ten_thousands).appc(&hundred));
+        let l = (ch.to_uint)(m(&ch).appc(&ten_thousands).appc(&thousand));
         let res = l.evaluate_to_value().unwrap();
-        assert_eq!(res, 1_000_000);
+        assert_eq!(res, 10_000_000);
     }
 
     #[ignore]
