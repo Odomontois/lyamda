@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use derivative::Derivative;
 use thiserror::Error;
@@ -8,23 +8,37 @@ use super::EvalValue;
 #[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
 pub struct Context<V> {
-    vars: Rc<Vec<V>>,
+    vars: Rc<RefCell<Vec<Option<V>>>>,
+    arity: Rc<usize>,
 }
 
 impl<'a, V: Clone> Context<V> {
     pub fn pushed<'b>(&'b self, v: V) -> Self {
-        let vars: &Vec<_> = self.vars.borrow();
-        let mut vars = vars.clone();
-        vars.push(v);
-        let vars = Rc::new(vars);
-        Self { vars }
+        let r = self.vars.borrow();
+        let mut vars = r.clone();
+        vars.push(Some(v));
+        let vars = Rc::new(RefCell::new(vars));
+        let ix = Rc::new(&*self.arity + 1);
+        Self { vars, arity: ix }
     }
 
     pub fn get(&self, i: usize) -> Result<V, ContextError> {
-        let vars: &Vec<_> = self.vars.borrow();
-        vars.get(self.vars.len() - i - 1)
+        let r = self.vars.borrow();
+        r.get(r.len() - i - 1)
             .cloned()
+            .flatten()
             .ok_or_else(|| ContextError::NotFound)
+    }
+}
+
+impl<V> Drop for Context<V> {
+    fn drop(&mut self) {
+        if let Some(&mut arity) = Rc::get_mut(&mut self.arity) {
+            if arity > 0 {
+                let mut r = self.vars.borrow_mut();
+                r[arity - 1] = None;
+            }
+        }
     }
 }
 
@@ -41,5 +55,8 @@ fn lol() {
     use crate::lya::{evaluate::EvalError, uints::ArithmeticError};
     use std::mem::size_of;
 
-    println!("{}", size_of::<EvalValue<u64, EvalError<ArithmeticError>>>());
+    println!(
+        "{}",
+        size_of::<EvalValue<u64, EvalError<ArithmeticError>>>()
+    );
 }
