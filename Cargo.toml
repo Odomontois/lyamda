@@ -3,6 +3,9 @@ name = "lyamda"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+bench = false
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -18,5 +21,6 @@ criterion = { version = "0.4", features = ["html_reports"] }
 [[bench]]
 name = "eval"
 harness = false
+
 
 

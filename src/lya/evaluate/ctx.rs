@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use derivative::Derivative;
 use thiserror::Error;
@@ -8,25 +8,50 @@ use super::EvalValue;
 #[derive(Derivative, Debug)]
 #[derivative(Clone(bound = ""), Default(bound = ""))]
 pub struct Context<V> {
-    vars: Rc<Vec<V>>,
+    vars: Rc<RefCell<Vec<V>>>,
+    arity: usize,
 }
 
-impl<'a, V: Clone> Context<V> {
-    pub fn pushed<'b>(&'b self, v: V) -> Self {
-        let vars: &Vec<_> = self.vars.borrow();
-        let mut vars = vars.clone();
-        vars.push(v);
-        let vars = Rc::new(vars);
-        Self { vars }
+impl<V: Clone> Context<V> {
+    pub fn pushed(&self, v: V) -> Self {
+        let r = self.vars.borrow();
+        let vars = if self.arity == r.len() {
+            drop(r);
+            let mut r = self.vars.borrow_mut();
+            r.push(v);
+            self.vars.clone()
+        } else {
+            let mut vars: Vec<_> = r.iter().take(self.arity).cloned().collect();
+            vars.push(v);
+            Rc::new(RefCell::new(vars))
+        };
+        let arity = self.arity + 1;
+        Self { vars, arity }
     }
 
     pub fn get(&self, i: usize) -> Result<V, ContextError> {
-        let vars: &Vec<_> = self.vars.borrow();
-        vars.get(self.vars.len() - i - 1)
-            .cloned()
+        let r = self.vars.borrow();
+        r.get(self.arity - i - 1)
+            .map(|x| x.clone())
             .ok_or_else(|| ContextError::NotFound)
     }
 }
+
+// impl<V> Drop for Context<V> {
+//     fn drop(&mut self) {
+//         if let Some(&mut arity) = Rc::get_mut(&mut self.arity) {
+//             if arity > 0 {
+//                 let mut r = self.vars.borrow_mut();
+//                 r[arity - 1].1 = false;
+//                 if arity == r.len() {
+//                     while r.last().map_or(false, |x| !x.1) {
+//                         r.pop();
+//                     }
+//                 }
+//             }
+//         }
+//     }
+// }
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ContextError {
@@ -41,5 +66,13 @@ fn lol() {
     use crate::lya::{evaluate::EvalError, uints::ArithmeticError};
     use std::mem::size_of;
 
-    println!("{}", size_of::<EvalValue<u64, EvalError<ArithmeticError>>>());
+    println!(
+        "{}",
+        size_of::<EvalValue<u64, EvalError<ArithmeticError>>>()
+    );
+
+    println!(
+        "{}",
+        size_of::<ContextError>()
+    );
 }
