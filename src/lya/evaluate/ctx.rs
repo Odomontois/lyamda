@@ -24,14 +24,22 @@ impl<'a, V: Clone> Context<V> {
         let vars: &Vec<_> = self.vars.borrow();
         vars.get(self.vars.len() - i - 1)
             .cloned()
-            .ok_or_else(|| ContextError::NotFound(i))
+            .ok_or_else(|| ContextError::NotFound)
     }
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ContextError {
-    #[error("variable not found: {0}")]
-    NotFound(usize),
+    #[error("variable not found")]
+    NotFound,
 }
 
 pub type EvalCtx<R, E> = Context<EvalValue<R, E>>;
+
+#[test]
+fn lol() {
+    use crate::lya::{evaluate::EvalError, uints::ArithmeticError};
+    use std::mem::size_of;
+
+    println!("{}", size_of::<EvalValue<u64, EvalError<ArithmeticError>>>());
+}
