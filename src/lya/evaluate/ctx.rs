@@ -37,22 +37,6 @@ impl<V: Clone> Context<V> {
     }
 }
 
-// impl<V> Drop for Context<V> {
-//     fn drop(&mut self) {
-//         if let Some(&mut arity) = Rc::get_mut(&mut self.arity) {
-//             if arity > 0 {
-//                 let mut r = self.vars.borrow_mut();
-//                 r[arity - 1].1 = false;
-//                 if arity == r.len() {
-//                     while r.last().map_or(false, |x| !x.1) {
-//                         r.pop();
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }
-
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum ContextError {
     #[error("variable not found")]
@@ -61,18 +45,3 @@ pub enum ContextError {
 
 pub type EvalCtx<R, E> = Context<EvalValue<R, E>>;
 
-#[test]
-fn lol() {
-    use crate::lya::{evaluate::EvalError, uints::ArithmeticError};
-    use std::mem::size_of;
-
-    println!(
-        "{}",
-        size_of::<EvalValue<u64, EvalError<ArithmeticError>>>()
-    );
-
-    println!(
-        "{}",
-        size_of::<ContextError>()
-    );
-}

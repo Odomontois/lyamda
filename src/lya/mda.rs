@@ -1,36 +1,16 @@
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
-    marker::PhantomData,
     rc::Rc,
 };
 
 use super::{
     debrujin::{DeBrujin, DeBrujinCtx, NotFoundError},
     evaluate::{EvalError, EvalValue, Evaluate},
+    flavour::{CloneFlavour, Flavour, HashableNameFlavour, NoExt, Untyped},
 };
 use derive_more::From;
 use thiserror::Error;
-pub trait VarName {
-    type Decl;
-    type Use;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Named<K>(PhantomData<K>);
-
-impl<S> VarName for Named<S> {
-    type Decl = S;
-    type Use = S;
-}
-
-pub enum NoExt {}
-
-impl Display for NoExt {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {}
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct Star();
@@ -41,19 +21,20 @@ impl Display for Star {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, From)]
-pub enum Lam<Name: VarName, Ty, Ext> {
-    Var(Name::Use),
-    Abs(Name::Decl, Ty, Rc<Lam<Name, Ty, Ext>>),
-    App(Rc<Lam<Name, Ty, Ext>>, Rc<Lam<Name, Ty, Ext>>),
-    #[from]
-    Ext(Ext),
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Lam<F: Flavour> {
+    Var(F::UseName),
+    Abs(F::DeclareName, F::Type, Rc<Lam<F>>),
+    App(Rc<Lam<F>>, Rc<Lam<F>>),
+    Ext(F::Term),
 }
 
-impl<Name: VarName, Ty: Display, Ext: Display> Display for Lam<Name, Ty, Ext>
+impl<F: Flavour> Display for Lam<F>
 where
-    Name::Decl: Display,
-    Name::Use: Display,
+    F::DeclareName: Display,
+    F::UseName: Display,
+    F::Type: Display,
+    F::Term: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -65,25 +46,25 @@ where
     }
 }
 
-impl<Name: VarName, Ext> Lam<Name, (), Ext> {}
+impl<F: Flavour> Lam<F> {}
 
-impl<Name: VarName, Ty, Ext> Lam<Name, Ty, Ext> {
-    pub fn lam(v: Name::Decl, ty: Ty, body: Lam<Name, Ty, Ext>) -> Self {
+impl<F: Flavour> Lam<F> {
+    pub fn lam(v: F::DeclareName, ty: F::Type, body: Lam<F>) -> Self {
         Lam::Abs(v, ty, body.into())
     }
 
-    pub fn dlam(v: Name::Decl, body: Lam<Name, Ty, Ext>) -> Lam<Name, Ty, Ext>
+    pub fn dlam(v: F::DeclareName, body: Lam<F>) -> Lam<F>
     where
-        Ty: Default,
+        F::Type: Default,
     {
-        Self::lam(v, Ty::default(), body)
+        Self::lam(v, F::Type::default(), body)
     }
 
-    pub fn app(self, arg: Lam<Name, Ty, Ext>) -> Self {
+    pub fn app(self, arg: Lam<F>) -> Self {
         Lam::App(self.into(), arg.into())
     }
 
-    pub fn appc(&self, arg: &Lam<Name, Ty, Ext>) -> Self
+    pub fn appc(&self, arg: &Lam<F>) -> Self
     where
         Self: Clone,
     {
@@ -97,33 +78,35 @@ pub enum EvalRunError<K, E> {
     Eval(#[from] EvalError<E>),
 }
 
-pub type LamRes<A, K, Ext> = Result<A, EvalRunError<K, <Ext as Evaluate>::Error>>;
+pub type LamRes<A, F> = Result<A, EvalRunError<<F as Flavour>::UseName, <F as Evaluate>::Error>>;
 
-pub type LamResEval<K, Ext> =
-    LamRes<EvalValue<<Ext as Evaluate>::Value, <Ext as Evaluate>::Error>, K, Ext>;
+pub type LamResEval<F> = LamRes<EvalValue<<F as Evaluate>::Value, <F as Evaluate>::Error>, F>;
 
-pub type LamResValue<K, Ext> = LamRes<<Ext as Evaluate>::Value, K, Ext>;
+pub type LamResValue<F> = LamRes<<F as Evaluate>::Value, F>;
 
-impl<Ty: Clone + 'static, Ext: Clone + 'static, K: Hash + Eq + Clone> Lam<Named<K>, Ty, Ext> {
-    pub fn to_debrujin(&self) -> Result<Lam<DeBrujin, Ty, Ext>, NotFoundError<K>> {
+impl<F: Flavour> Lam<F> where 
+    F::UseName: Hash + Eq + Clone, {
+    pub fn to_debrujin(&self) -> Result<Lam<F>, NotFoundError<F::UseName>> {
         let mut ctx = DeBrujinCtx::default();
         ctx.to_debrujin(self).ok_or_else(|| ctx.error())
     }
 }
 
-impl<Ty: Clone + 'static, Ext: Clone + Evaluate + 'static, K: Hash + Eq + Clone>
-    Lam<Named<K>, Ty, Ext>
+impl<F: Flavour + Evaluate> Lam<F>
+where
+    F::UseName: Hash + Eq + Clone,
+    F::DeclareName: Into<F::UseName>,
 {
-    pub fn evaluate(&self) -> LamResEval<K, Ext> {
+    pub fn evaluate(&self) -> LamResEval<F> {
         let d = self.to_debrujin()?;
         let d = d.evaluate()?;
         Ok(d)
     }
 
-    pub fn evaluate_to_value(&self) -> LamResValue<K, Ext> {
+    pub fn evaluate_to_value(&self) -> LamResValue<F> {
         Ok(self.evaluate()?.as_value()?)
     }
 }
 
-pub type UntypedLam<K> = Lam<Named<K>, Star, NoExt>;
-pub type UntypedLamWith<K, Ext> = Lam<Named<K>, Star, Ext>;
+pub type UntypedLam<K> = Lam<Untyped<K, NoExt>>;
+pub type UntypedLamWith<K, Ext> = Lam<Untyped<K, Ext>>;
