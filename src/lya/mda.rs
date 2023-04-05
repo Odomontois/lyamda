@@ -9,7 +9,7 @@ use super::{
     evaluate::{EvalError, EvalValue, Evaluate},
     flavour::{Flavour, NoExt, Untyped},
 };
-use derive_more::From;
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
@@ -67,6 +67,10 @@ impl<F: Flavour> Lam<F> {
         Self: Clone,
     {
         self.clone().app(arg.clone())
+    }
+
+    pub fn ext(e: F::Term) -> Self {
+        Lam::Ext(e)
     }
 }
 

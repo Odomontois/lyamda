@@ -1,6 +1,10 @@
 use std::fmt::Display;
 
-use super::evaluate::{EvalCtx, EvalStepResult, EvalValue, Evaluate, ExtError};
+use super::{
+    evaluate::{EvalCtx, EvalStepResult, EvalValue, Evaluate, ExtError},
+    flavour::Untyped,
+    mda::Lam,
+};
 use derive_more::From;
 use thiserror::Error;
 
@@ -45,6 +49,12 @@ impl Display for Op {
 pub enum UIntExt {
     Num(u64),
     Op(Op),
+}
+
+impl<K> Into<Lam<Untyped<K, UIntExt>>> for UIntExt {
+    fn into(self) -> Lam<Untyped<K, UIntExt>> {
+        Lam::Ext(self)
+    }
 }
 
 impl Display for UIntExt {

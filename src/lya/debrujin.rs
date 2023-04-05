@@ -84,7 +84,7 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
                     self.not_found.insert(k.clone());
                     None
                 }),
-            Lam::Abs(k, ty, body) => {
+            Lam::Abs(k, _, body) => {
                 self.push(k.clone());
                 let body = self.to_debrujin(&*body)?;
                 self.pop();

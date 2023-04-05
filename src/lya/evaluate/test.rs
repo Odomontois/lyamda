@@ -3,7 +3,7 @@ use crate::lya::{
     uints::{Op, UIntExt},
 };
 
-use Lam::Var;
+use Lam::{Var , Ext};
 use Op::*;
 use UIntExt::*;
 
@@ -11,14 +11,14 @@ type IntLam = UntypedLamWith<&'static str, UIntExt>;
 
 #[test]
 fn num1() {
-    let l: IntLam = Num(1).into();
+    let l: IntLam = Lam::Ext(Num(1));
     let res = l.evaluate_to_value().unwrap();
     assert_eq!(res, 1);
 }
 
 #[test]
 fn num1_half() {
-    let l: IntLam = Lam::app(Op(Add).into(), Num(1).into()).into();
+    let l: IntLam = Lam::app(Ext(Op(Add)), Ext(Num(1))).into();
     assert!(l.eval_deb().unwrap().is_func());
 }
 
