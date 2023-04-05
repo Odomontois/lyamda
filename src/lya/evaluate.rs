@@ -52,9 +52,9 @@ pub trait Evaluate {
 
 pub type EvalResult<R, E> = Result<EvalValue<R, E>, EvalError<E>>;
 
-impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
-    type Value = Ext::Value;
-    type Error = Ext::Error;
+impl<T: Evaluate + 'static> Evaluate for Lam<DeBrujin<T>> {
+    type Value = T::Value;
+    type Error = T::Error;
 
     fn eval_step<'a>(
         &'a self,
@@ -64,7 +64,7 @@ impl<Ext: Evaluate + 'static, Ty: 'static> Evaluate for Lam<DeBrujin, Ty, Ext> {
             Lam::Var(Use(i)) => Ok(ctx.get(*i)?.into()),
 
             Lam::Abs(_, _, exp) => {
-                let exp: Rc<Lam<DeBrujin, Ty, Ext>> = exp.clone();
+                let exp: Rc<Lam<DeBrujin<T>>> = exp.clone();
                 let ctx = ctx.clone();
                 Ok(EvalValue::func(move |v| exp.eval_step(ctx.pushed(v))).into())
             }

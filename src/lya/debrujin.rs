@@ -2,15 +2,19 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     hash::Hash,
+    marker::PhantomData,
 };
 
 use derivative::Derivative;
 use thiserror::Error;
 
-use super::mda::{Lam, Named, Star, VarName};
+use super::{
+    flavour::Flavour,
+    mda::{Lam, Star},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DeBrujin {}
+pub struct DeBrujin<Term>(PhantomData<Term>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Use(pub usize);
@@ -22,9 +26,11 @@ impl Display for Use {
     }
 }
 
-impl VarName for DeBrujin {
-    type Decl = Star;
-    type Use = Use;
+impl<Ext> Flavour for DeBrujin<Ext> {
+    type DeclareName = Star;
+    type UseName = Use;
+    type Term = Ext;
+    type Type = ();
 }
 
 #[derive(Derivative)]
@@ -37,7 +43,7 @@ pub struct DeBrujinCtx<S> {
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub struct NotFoundError<S>(Vec<S>);
+pub struct NotFoundError<K>(Vec<K>);
 
 impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
     fn push(&mut self, k: K) {
@@ -63,10 +69,13 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
         NotFoundError(self.not_found.into_iter().collect())
     }
 
-    pub fn to_debrujin<Ty: Clone, Ext: Clone>(
+    pub fn to_debrujin<F: Flavour<UseName = K, DeclareName = K>>(
         &mut self,
-        lam: &Lam<Named<K>, Ty, Ext>,
-    ) -> Option<Lam<DeBrujin, Ty, Ext>> {
+        lam: &Lam<F>,
+    ) -> Option<Lam<DeBrujin<F::Term>>>
+    where
+        F::Term: Clone,
+    {
         match lam {
             Lam::Var(k) => self
                 .get(&k)
@@ -75,11 +84,11 @@ impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
                     self.not_found.insert(k.clone());
                     None
                 }),
-            Lam::Abs(k, ty, body) => {
+            Lam::Abs(k, _, body) => {
                 self.push(k.clone());
                 let body = self.to_debrujin(&*body)?;
                 self.pop();
-                Some(Lam::Abs(Star(), ty.clone(), body.into()))
+                Some(Lam::Abs(Star(), (), body.into()))
             }
             Lam::App(f, arg) => {
                 let f = self.to_debrujin(&*f);
