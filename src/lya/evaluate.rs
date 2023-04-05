@@ -13,7 +13,6 @@ pub(crate) use self::value::EvalValue;
 
 use super::{
     debrujin::{DeBrujin, Use},
-    flavour::Flavour,
     mda::Lam,
 };
 
@@ -53,9 +52,9 @@ pub trait Evaluate {
 
 pub type EvalResult<R, E> = Result<EvalValue<R, E>, EvalError<E>>;
 
-impl<F: Evaluate + Flavour> Evaluate for Lam<F> {
-    type Value = F::Value;
-    type Error = F::Error;
+impl<T: Evaluate + 'static> Evaluate for Lam<DeBrujin<T>> {
+    type Value = T::Value;
+    type Error = T::Error;
 
     fn eval_step<'a>(
         &'a self,
@@ -65,7 +64,7 @@ impl<F: Evaluate + Flavour> Evaluate for Lam<F> {
             Lam::Var(Use(i)) => Ok(ctx.get(*i)?.into()),
 
             Lam::Abs(_, _, exp) => {
-                let exp: Rc<Lam<F>> = exp.clone();
+                let exp: Rc<Lam<DeBrujin<T>>> = exp.clone();
                 let ctx = ctx.clone();
                 Ok(EvalValue::func(move |v| exp.eval_step(ctx.pushed(v))).into())
             }

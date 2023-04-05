@@ -43,7 +43,7 @@ pub struct DeBrujinCtx<S> {
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub struct NotFoundError<S>(Vec<S>);
+pub struct NotFoundError<K>(Vec<K>);
 
 impl<K: Hash + Eq + Clone> DeBrujinCtx<K> {
     fn push(&mut self, k: K) {

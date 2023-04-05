@@ -19,7 +19,7 @@ fn num1() {
 #[test]
 fn num1_half() {
     let l: IntLam = Lam::app(Op(Add).into(), Num(1).into()).into();
-    assert!(l.evaluate().unwrap().is_func());
+    assert!(l.eval_deb().unwrap().is_func());
 }
 
 fn dlam(x: &'static str, body: IntLam) -> IntLam {

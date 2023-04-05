@@ -7,7 +7,7 @@ use std::{
 use super::{
     debrujin::{DeBrujin, DeBrujinCtx, NotFoundError},
     evaluate::{EvalError, EvalValue, Evaluate},
-    flavour::{CloneFlavour, Flavour, HashableNameFlavour, NoExt, Untyped},
+    flavour::{Flavour, NoExt, Untyped},
 };
 use derive_more::From;
 use thiserror::Error;
@@ -46,8 +46,6 @@ where
     }
 }
 
-impl<F: Flavour> Lam<F> {}
-
 impl<F: Flavour> Lam<F> {
     pub fn lam(v: F::DeclareName, ty: F::Type, body: Lam<F>) -> Self {
         Lam::Abs(v, ty, body.into())
@@ -73,38 +71,46 @@ impl<F: Flavour> Lam<F> {
 }
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum EvalRunError<K, E> {
+pub enum DebEvalError<K, E> {
     NotFound(#[from] NotFoundError<K>),
     Eval(#[from] EvalError<E>),
 }
 
-pub type LamRes<A, F> = Result<A, EvalRunError<<F as Flavour>::UseName, <F as Evaluate>::Error>>;
+pub type FlavourTerm<F> = <F as Flavour>::Term;
+pub type FlavourName<F> = <F as Flavour>::UseName;
+pub type FlavourValue<F> = <FlavourTerm<F> as Evaluate>::Value;
+pub type FlavourError<F> = <FlavourTerm<F> as Evaluate>::Error;
 
-pub type LamResEval<F> = LamRes<EvalValue<<F as Evaluate>::Value, <F as Evaluate>::Error>, F>;
+pub type DebEvalRes<A, F> = Result<A, DebEvalError<FlavourName<F>, FlavourError<F>>>;
 
-pub type LamResValue<F> = LamRes<<F as Evaluate>::Value, F>;
+pub type DebEval<F> = DebEvalRes<EvalValue<FlavourValue<F>, FlavourError<F>>, F>;
 
-impl<F: Flavour> Lam<F> where 
-    F::UseName: Hash + Eq + Clone, {
-    pub fn to_debrujin(&self) -> Result<Lam<F>, NotFoundError<F::UseName>> {
+pub type DebEvalValue<F> = DebEvalRes<FlavourValue<F>, F>;
+
+impl<F: Flavour<UseName = K, DeclareName = K>, K: Hash + Eq + Clone> Lam<F>
+where
+    F::Term: Clone,
+{
+    pub fn to_debrujin(&self) -> Result<Lam<DeBrujin<F::Term>>, NotFoundError<K>> {
         let mut ctx = DeBrujinCtx::default();
         ctx.to_debrujin(self).ok_or_else(|| ctx.error())
     }
 }
 
-impl<F: Flavour + Evaluate> Lam<F>
+impl<F, K, T> Lam<F>
 where
-    F::UseName: Hash + Eq + Clone,
-    F::DeclareName: Into<F::UseName>,
+    F: Flavour<UseName = K, DeclareName = K, Term = T>,
+    K: Hash + Eq + Clone,
+    T: Evaluate + Clone + 'static,
 {
-    pub fn evaluate(&self) -> LamResEval<F> {
+    pub fn eval_deb(&self) -> DebEval<F> {
         let d = self.to_debrujin()?;
         let d = d.evaluate()?;
         Ok(d)
     }
 
-    pub fn evaluate_to_value(&self) -> LamResValue<F> {
-        Ok(self.evaluate()?.as_value()?)
+    pub fn evaluate_to_value(&self) -> DebEvalValue<F> {
+        Ok(self.eval_deb()?.as_value()?)
     }
 }
 
