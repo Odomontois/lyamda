@@ -14,6 +14,7 @@ thiserror = "1.0.40"
 derive_more = "0.99.17"
 once_cell = "1.17.1"
 lazy_static = "1.4.0"
+frunk = "0.4.1"
 
 [dev-dependencies]
 criterion = { version = "0.4", features = ["html_reports"] }
