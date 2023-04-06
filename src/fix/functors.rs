@@ -96,8 +96,8 @@ pub trait Pure: Layer {
 
 pub trait Applicative: Functor + Pure {
     fn zip_with<A, B, C, F: FnMut(A, B) -> C>(
-        base: Self::Base<A>,
-        a: Self::Base<B>,
+        fa: Self::Base<A>,
+        fb: Self::Base<B>,
         f: F,
     ) -> Self::Base<C>;
 }
@@ -107,3 +107,5 @@ impl<L: Applicative> Functor for L {
         Self::zip_with(base, Self::pure(()), |a, _| f(a))
     }
 }
+
+
