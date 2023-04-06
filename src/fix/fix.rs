@@ -1,21 +1,94 @@
+use frunk::{coproduct::CNil, Coproduct};
+
 pub trait Layer {
     type Base<A>;
+}
+
+impl Layer for CNil {
+    type Base<A> = CNil;
+}
+
+impl<H: Layer, T: Layer> Layer for Coproduct<H, T> {
+    type Base<A> = Coproduct<H::Base<A>, T::Base<A>>;
 }
 
 pub trait CloneBase: Layer {
     fn clone<A: Clone>(base: &Self::Base<A>) -> Self::Base<A>;
 }
 
+impl CloneBase for CNil {
+    fn clone<A: Clone>(base: &CNil) -> Self::Base<A> {
+        match *base {}
+    }
+}
+
+impl<H: CloneBase, T: CloneBase> CloneBase for Coproduct<H, T> {
+    fn clone<A: Clone>(base: &Self::Base<A>) -> Self::Base<A> {
+        match base {
+            Coproduct::Inl(h) => Coproduct::Inl(H::clone(h)),
+            Coproduct::Inr(t) => Coproduct::Inr(T::clone(t)),
+        }
+    }
+}
+
 pub trait LayerFunctor: Layer {
     fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, f: F) -> Self::Base<B>;
+}
+
+impl LayerFunctor for CNil {
+    fn map<A, B, F: FnMut(A) -> B>(base: CNil, _f: F) -> Self::Base<B> {
+        match base {}
+    }
+}
+
+impl<H: LayerFunctor, T: LayerFunctor> LayerFunctor for Coproduct<H, T> {
+    fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, mut f: F) -> Self::Base<B> {
+        match base {
+            Coproduct::Inl(h) => Coproduct::Inl(H::map(h, &mut f)),
+            Coproduct::Inr(t) => Coproduct::Inr(T::map(t, &mut f)),
+        }
+    }
 }
 
 pub trait LayerCloneFunctor: CloneBase {
     fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
 }
 
+impl LayerCloneFunctor for CNil {
+    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &CNil, _f: F) -> Self::Base<B> {
+        match *base {}
+    }
+}
+
+impl<H: LayerCloneFunctor, T: LayerCloneFunctor> LayerCloneFunctor for Coproduct<H, T> {
+    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, mut f: F) -> Self::Base<B> {
+        match base {
+            Coproduct::Inl(h) => Coproduct::Inl(H::map_clone(h, &mut f)),
+            Coproduct::Inr(t) => Coproduct::Inr(T::map_clone(t, &mut f)),
+        }
+    }
+}
+
 pub trait LayerRefFunctor: Layer {
     fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
+}
+
+impl LayerRefFunctor for CNil {
+    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(base: &CNil, _f: F) -> Self::Base<B> {
+        match *base {}
+    }
+}
+
+impl<H: LayerRefFunctor, T: LayerRefFunctor> LayerRefFunctor for Coproduct<H, T> {
+    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(
+        base: &Self::Base<A>,
+        mut f: F,
+    ) -> Self::Base<B> {
+        match base {
+            Coproduct::Inl(h) => Coproduct::Inl(H::map_ref(h, &mut f)),
+            Coproduct::Inr(t) => Coproduct::Inr(T::map_ref(t, &mut f)),
+        }
+    }
 }
 
 pub struct FixBox<L: Layer>(Box<L::Base<FixBox<L>>>);
