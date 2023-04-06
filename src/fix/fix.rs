@@ -2,11 +2,15 @@ pub trait Layer {
     type Base<A>;
 }
 
+pub trait CloneBase: Layer {
+    fn clone<A: Clone>(base: &Self::Base<A>) -> Self::Base<A>;
+}
+
 pub trait LayerFunctor: Layer {
     fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, f: F) -> Self::Base<B>;
 }
 
-pub trait LayerCloneFunctor: Layer {
+pub trait LayerCloneFunctor: CloneBase {
     fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
 }
 
@@ -16,12 +20,9 @@ pub trait LayerRefFunctor: Layer {
 
 pub struct FixBox<L: Layer>(Box<L::Base<FixBox<L>>>);
 
-impl<L: Layer> Clone for FixBox<L>
-where
-    L::Base<FixBox<L>>: Clone,
-{
+impl<L: CloneBase> Clone for FixBox<L> {
     fn clone(&self) -> Self {
-        FixBox(self.0.clone())
+        FixBox(L::clone(&self.0).into())
     }
 }
 
@@ -91,7 +92,7 @@ impl<L: LayerRefFunctor> FixBox<L> {
 mod test {
     use std::marker::PhantomData;
 
-    use super::{FixBox, Layer, LayerCloneFunctor, LayerFunctor, LayerRefFunctor};
+    use super::{CloneBase, FixBox, Layer, LayerCloneFunctor, LayerFunctor, LayerRefFunctor};
 
     type ListLayer<A, B> = Option<(A, B)>;
     struct List<A>(PhantomData<A>);
@@ -115,6 +116,13 @@ mod test {
             let (i, a) = base.as_ref()?;
             let b = f(a);
             Some((i.clone(), b))
+        }
+    }
+
+    impl<I: Clone> CloneBase for List<I> {
+        fn clone<A: Clone>(base: &Option<(I, A)>) -> Option<(I, A)> {
+            let (i, a) = base.as_ref()?;
+            Some((i.clone(), a.clone()))
         }
     }
 
@@ -154,5 +162,6 @@ mod test {
     #[test]
     fn cloning() {
         let s: i32 = range(1, 6).fold_clone(|x| x.map_or(0, |(x, y)| x + y));
+        assert_eq!(s, 15);
     }
 }
