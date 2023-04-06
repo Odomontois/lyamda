@@ -1,95 +1,6 @@
-use frunk::{coproduct::CNil, Coproduct};
+use super::functors::{Layer, CloneBase, Functor, CloneFunctor, RefFunctor};
 
-pub trait Layer {
-    type Base<A>;
-}
 
-impl Layer for CNil {
-    type Base<A> = CNil;
-}
-
-impl<H: Layer, T: Layer> Layer for Coproduct<H, T> {
-    type Base<A> = Coproduct<H::Base<A>, T::Base<A>>;
-}
-
-pub trait CloneBase: Layer {
-    fn clone<A: Clone>(base: &Self::Base<A>) -> Self::Base<A>;
-}
-
-impl CloneBase for CNil {
-    fn clone<A: Clone>(base: &CNil) -> Self::Base<A> {
-        match *base {}
-    }
-}
-
-impl<H: CloneBase, T: CloneBase> CloneBase for Coproduct<H, T> {
-    fn clone<A: Clone>(base: &Self::Base<A>) -> Self::Base<A> {
-        match base {
-            Coproduct::Inl(h) => Coproduct::Inl(H::clone(h)),
-            Coproduct::Inr(t) => Coproduct::Inr(T::clone(t)),
-        }
-    }
-}
-
-pub trait LayerFunctor: Layer {
-    fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, f: F) -> Self::Base<B>;
-}
-
-impl LayerFunctor for CNil {
-    fn map<A, B, F: FnMut(A) -> B>(base: CNil, _f: F) -> Self::Base<B> {
-        match base {}
-    }
-}
-
-impl<H: LayerFunctor, T: LayerFunctor> LayerFunctor for Coproduct<H, T> {
-    fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, mut f: F) -> Self::Base<B> {
-        match base {
-            Coproduct::Inl(h) => Coproduct::Inl(H::map(h, &mut f)),
-            Coproduct::Inr(t) => Coproduct::Inr(T::map(t, &mut f)),
-        }
-    }
-}
-
-pub trait LayerCloneFunctor: CloneBase {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
-}
-
-impl LayerCloneFunctor for CNil {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &CNil, _f: F) -> Self::Base<B> {
-        match *base {}
-    }
-}
-
-impl<H: LayerCloneFunctor, T: LayerCloneFunctor> LayerCloneFunctor for Coproduct<H, T> {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, mut f: F) -> Self::Base<B> {
-        match base {
-            Coproduct::Inl(h) => Coproduct::Inl(H::map_clone(h, &mut f)),
-            Coproduct::Inr(t) => Coproduct::Inr(T::map_clone(t, &mut f)),
-        }
-    }
-}
-
-pub trait LayerRefFunctor: Layer {
-    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
-}
-
-impl LayerRefFunctor for CNil {
-    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(base: &CNil, _f: F) -> Self::Base<B> {
-        match *base {}
-    }
-}
-
-impl<H: LayerRefFunctor, T: LayerRefFunctor> LayerRefFunctor for Coproduct<H, T> {
-    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(
-        base: &Self::Base<A>,
-        mut f: F,
-    ) -> Self::Base<B> {
-        match base {
-            Coproduct::Inl(h) => Coproduct::Inl(H::map_ref(h, &mut f)),
-            Coproduct::Inr(t) => Coproduct::Inr(T::map_ref(t, &mut f)),
-        }
-    }
-}
 
 pub struct FixBox<L: Layer>(Box<L::Base<FixBox<L>>>);
 
@@ -105,7 +16,7 @@ impl<L: Layer> FixBox<L> {
     }
 }
 
-impl<L: LayerFunctor> FixBox<L> {
+impl<L: Functor> FixBox<L> {
     pub fn fold<R: 'static, F>(self, mut f: F) -> R
     where
         F: FnMut(L::Base<R>) -> R,
@@ -122,7 +33,7 @@ impl<L: LayerFunctor> FixBox<L> {
     }
 }
 
-impl<L: LayerCloneFunctor> FixBox<L>
+impl<L: CloneFunctor> FixBox<L>
 where
     FixBox<L>: Clone,
 {
@@ -142,7 +53,7 @@ where
     }
 }
 
-impl<L: LayerRefFunctor> FixBox<L> {
+impl<L: RefFunctor> FixBox<L> {
     pub fn fold_ref<'a, 'f, R: 'static, F>(&'a self, mut f: F) -> R
     where
         F: for<'t> FnMut(&'t L::Base<R>) -> R + 'a,
@@ -165,7 +76,7 @@ impl<L: LayerRefFunctor> FixBox<L> {
 mod test {
     use std::marker::PhantomData;
 
-    use super::{CloneBase, FixBox, Layer, LayerCloneFunctor, LayerFunctor, LayerRefFunctor};
+    use super::{CloneBase, FixBox, Layer, CloneFunctor, Functor, RefFunctor};
 
     type ListLayer<A, B> = Option<(A, B)>;
     struct List<A>(PhantomData<A>);
@@ -173,7 +84,7 @@ mod test {
     impl<I> Layer for List<I> {
         type Base<A> = ListLayer<I, A>;
     }
-    impl<I> LayerFunctor for List<I> {
+    impl<I> Functor for List<I> {
         fn map<A, B, F: FnMut(A) -> B>(base: ListLayer<I, A>, mut f: F) -> ListLayer<I, B> {
             let (i, a) = base?;
             let b = f(a);
@@ -181,7 +92,7 @@ mod test {
         }
     }
 
-    impl<I: Clone> LayerRefFunctor for List<I> {
+    impl<I: Clone> RefFunctor for List<I> {
         fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(
             base: &Option<(I, A)>,
             mut f: F,
@@ -199,7 +110,7 @@ mod test {
         }
     }
 
-    impl<I: Clone> LayerCloneFunctor for List<I> {
+    impl<I: Clone> CloneFunctor for List<I> {
         fn map_clone<A: Clone, B, F: FnMut(A) -> B>(
             base: &Self::Base<A>,
             mut f: F,

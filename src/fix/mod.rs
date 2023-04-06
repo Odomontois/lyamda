@@ -1,2 +1,2 @@
 pub mod fix;
-pub mod injecting;
+pub mod functors;
