@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::functors::{Applicative, Layer, Pure};
+use super::functors::{Applicative, Layer, Pure, RefApplicative, Traverse};
 
 struct Opt;
 
@@ -65,5 +65,43 @@ impl Applicative for Vect {
         mut f: F,
     ) -> Self::Base<C> {
         fa.into_iter().zip(fb).map(|(a, b)| f(a, b)).collect()
+    }
+}
+
+struct Identity;
+
+impl Layer for Identity {
+    type Base<A> = A;
+}
+
+impl Pure for Identity {
+    fn pure<A>(a: A) -> Self::Base<A> {
+        a
+    }
+}
+
+impl Applicative for Identity {
+    fn zip_with<A, B, C, F: FnMut(A, B) -> C>(
+        fa: Self::Base<A>,
+        fb: Self::Base<B>,
+        mut f: F,
+    ) -> Self::Base<C> {
+        f(fa, fb)
+    }
+}
+
+impl RefApplicative for Identity {
+    fn zip_with_ref<A, B, C, F: for<'t> FnMut(&'t A, &'t B) -> C>(
+        fa: &Self::Base<A>,
+        fb: &Self::Base<B>,
+        mut f: F,
+    ) -> Self::Base<C> {
+        f(fa, fb)
+    }
+}
+
+impl Traverse for Identity {
+    fn traverse<A, B, T: Applicative, F: FnMut(A) -> T::Base<B>>(fa: A, mut f: F) -> T::Base<B> {
+        f(fa)
     }
 }

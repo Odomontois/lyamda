@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use frunk::{coproduct::CNil, Coproduct};
 
 pub trait Layer {
@@ -103,5 +105,51 @@ impl<L: RefApplicative> RefFunctor for L {
         mut f: F,
     ) -> Self::Base<B> {
         Self::zip_with_ref(base, &Self::pure(()), |a, _| f(a))
+    }
+}
+
+pub trait Traverse: Functor {
+    fn traverse<A, B, T: Applicative, F: FnMut(A) -> T::Base<B>>(
+        base: Self::Base<A>,
+        f: F,
+    ) -> T::Base<Self::Base<B>>;
+
+    fn traverse_hint<A, B, T: Applicative, F: FnMut(A) -> T::Base<B>>(
+        base: Self::Base<A>,
+        #[allow(unused_variables)] hint: T,
+        f: F,
+    ) -> T::Base<Self::Base<B>> {
+        Self::traverse::<_, _, T, _>(base, f)
+    }
+
+    fn traverse_phantom<A, B, T: Applicative, F: FnMut(A) -> T::Base<B>>(
+        base: Self::Base<A>,
+        #[allow(unused_variables)] hint: PhantomData<T>,
+        f: F,
+    ) -> T::Base<Self::Base<B>> {
+        Self::traverse::<_, _, T, _>(base, f)
+    }
+}
+
+pub trait RefTraverse: RefFunctor {
+    fn traverse_ref<A, B, T: RefApplicative, F: for<'t> FnMut(&'t A) -> T::Base<B>>(
+        base: &Self::Base<A>,
+        f: F,
+    ) -> T::Base<Self::Base<B>>;
+
+    fn traverse_ref_hint<A, B, T: RefApplicative, F: for<'t> FnMut(&'t A) -> T::Base<B>>(
+        base: &Self::Base<A>,
+        #[allow(unused_variables)] hint: T,
+        f: F,
+    ) -> T::Base<Self::Base<B>> {
+        Self::traverse_ref::<_, _, T, _>(base, f)
+    }
+
+    fn traverse_ref_phantom<A, B, T: RefApplicative, F: for<'t> FnMut(&'t A) -> T::Base<B>>(
+        base: &Self::Base<A>,
+        #[allow(unused_variables)] hint: PhantomData<T>,
+        f: F,
+    ) -> T::Base<Self::Base<B>> {
+        Self::traverse_ref::<_, _, T, _>(base, f)
     }
 }
