@@ -50,25 +50,6 @@ impl<H: Functor, T: Functor> Functor for Coproduct<H, T> {
     }
 }
 
-pub trait CloneFunctor: CloneBase {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
-}
-
-impl CloneFunctor for CNil {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &CNil, _f: F) -> Self::Base<B> {
-        match *base {}
-    }
-}
-
-impl<H: CloneFunctor, T: CloneFunctor> CloneFunctor for Coproduct<H, T> {
-    fn map_clone<A: Clone, B, F: FnMut(A) -> B>(base: &Self::Base<A>, mut f: F) -> Self::Base<B> {
-        match base {
-            Coproduct::Inl(h) => Coproduct::Inl(H::map_clone(h, &mut f)),
-            Coproduct::Inr(t) => Coproduct::Inr(T::map_clone(t, &mut f)),
-        }
-    }
-}
-
 pub trait RefFunctor: Layer {
     fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(base: &Self::Base<A>, f: F) -> Self::Base<B>;
 }
@@ -108,4 +89,19 @@ impl<L: Applicative> Functor for L {
     }
 }
 
+pub trait RefApplicative: RefFunctor + Pure {
+    fn zip_with_ref<A, B, C, F: for<'t> FnMut(&'t A, &'t B) -> C>(
+        fa: &Self::Base<A>,
+        fb: &Self::Base<B>,
+        f: F,
+    ) -> Self::Base<C>;
+}
 
+impl<L: RefApplicative> RefFunctor for L {
+    fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(
+        base: &Self::Base<A>,
+        mut f: F,
+    ) -> Self::Base<B> {
+        Self::zip_with_ref(base, &Self::pure(()), |a, _| f(a))
+    }
+}

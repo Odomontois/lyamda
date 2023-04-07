@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::fix::functors::{Layer, Functor, RefFunctor};
+use crate::fix::functors::{Functor, Layer, RefFunctor};
 
 pub enum LamName<K, A> {
     Var(K),

@@ -1,6 +1,4 @@
-use super::functors::{Layer, CloneBase, Functor, CloneFunctor, RefFunctor};
-
-
+use super::functors::{CloneBase, Functor, Layer, RefFunctor};
 
 pub struct FixBox<L: Layer>(Box<L::Base<FixBox<L>>>);
 
@@ -33,26 +31,6 @@ impl<L: Functor> FixBox<L> {
     }
 }
 
-impl<L: CloneFunctor> FixBox<L>
-where
-    FixBox<L>: Clone,
-{
-    pub fn fold_clone<R: 'static, F>(self, mut f: F) -> R
-    where
-        F: FnMut(L::Base<R>) -> R,
-    {
-        self.fold_clone_impl(&mut f)
-    }
-
-    fn fold_clone_impl<R: 'static, F>(self, f: &mut F) -> R
-    where
-        F: FnMut(L::Base<R>) -> R,
-    {
-        let br: L::Base<R> = L::map_clone(&*self.0, |x| x.fold_clone_impl(f));
-        f(br)
-    }
-}
-
 impl<L: RefFunctor> FixBox<L> {
     pub fn fold_ref<'a, 'f, R: 'static, F>(&'a self, mut f: F) -> R
     where
@@ -76,7 +54,7 @@ impl<L: RefFunctor> FixBox<L> {
 mod test {
     use std::marker::PhantomData;
 
-    use super::{CloneBase, FixBox, Layer, CloneFunctor, Functor, RefFunctor};
+    use super::{CloneBase, FixBox, Functor, Layer, RefFunctor};
 
     type ListLayer<A, B> = Option<(A, B)>;
     struct List<A>(PhantomData<A>);
@@ -110,17 +88,6 @@ mod test {
         }
     }
 
-    impl<I: Clone> CloneFunctor for List<I> {
-        fn map_clone<A: Clone, B, F: FnMut(A) -> B>(
-            base: &Self::Base<A>,
-            mut f: F,
-        ) -> Self::Base<B> {
-            let (i, a) = base.as_ref()?;
-            let b = f(a.clone());
-            Some((i.clone(), b))
-        }
-    }
-
     fn range(start: i32, end: i32) -> FixBox<List<i32>> {
         let mut l = FixBox::new(None);
 
@@ -140,12 +107,6 @@ mod test {
     #[test]
     fn non_consuming() {
         let s: i32 = range(1, 6).fold_ref(|x| x.map_or(0, |(x, y)| x + y));
-        assert_eq!(s, 15);
-    }
-
-    #[test]
-    fn cloning() {
-        let s: i32 = range(1, 6).fold_clone(|x| x.map_or(0, |(x, y)| x + y));
         assert_eq!(s, 15);
     }
 }
