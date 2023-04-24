@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::functors::{Applicative, Layer, Pure, RefApplicative, Traverse};
+use super::functors::{Applicative, Functor, Layer, Pure, RefApplicative, RefFunctor, Traverse};
 
 struct Opt;
 
@@ -103,5 +103,29 @@ impl RefApplicative for Identity {
 impl Traverse for Identity {
     fn traverse<A, B, T: Applicative, F: FnMut(A) -> T::Base<B>>(fa: A, mut f: F) -> T::Base<B> {
         f(fa)
+    }
+}
+
+struct Const<A>(PhantomData<A>);
+
+impl<A> Layer for Const<A> {
+    type Base<B> = A;
+}
+
+impl<A> Functor for Const<A> {
+    fn map<B, C, F: FnMut(B) -> C>(a: A, _: F) -> A {
+        a
+    }
+}
+
+impl<A: Clone> RefFunctor for Const<A> {
+    fn map_ref<B, C, F: for<'t> FnMut(&'t B) -> C>(a: &A, _: F) -> A {
+        a.clone()
+    }
+}
+
+impl<A> Traverse for Const<A> {
+    fn traverse<B, C, T: Applicative, F: FnMut(B) -> T::Base<C>>(a: A, _: F) -> T::Base<A> {
+        T::pure(a)
     }
 }

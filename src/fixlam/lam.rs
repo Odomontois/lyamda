@@ -2,35 +2,35 @@ use std::marker::PhantomData;
 
 use crate::fix::functors::{Functor, Layer, RefFunctor};
 
-pub enum LamName<K, A> {
-    Var(K),
+pub enum LamName<I, K, A> {
+    Var(I, K),
     Abs(K, A),
     App(A, A),
 }
 
-pub struct Lam<K>(PhantomData<K>);
+pub struct Lam<I, K>(PhantomData<(I, K)>);
 
-impl<K> Layer for Lam<K> {
-    type Base<A> = LamName<K, A>;
+impl<I, K> Layer for Lam<I, K> {
+    type Base<A> = LamName<I, K, A>;
 }
 
-impl<K> Functor for Lam<K> {
+impl<I, K> Functor for Lam<I, K> {
     fn map<A, B, F: FnMut(A) -> B>(base: Self::Base<A>, mut f: F) -> Self::Base<B> {
         match base {
-            LamName::Var(k) => LamName::Var(k),
+            LamName::Var(i, k) => LamName::Var(i, k),
             LamName::Abs(k, a) => LamName::Abs(k, f(a)),
             LamName::App(a, b) => LamName::App(f(a), f(b)),
         }
     }
 }
 
-impl<K: Clone> RefFunctor for Lam<K> {
+impl<I: Clone, K: Clone> RefFunctor for Lam<I, K> {
     fn map_ref<A, B, F: for<'t> FnMut(&'t A) -> B>(
         base: &Self::Base<A>,
         mut f: F,
     ) -> Self::Base<B> {
         match base {
-            LamName::Var(k) => LamName::Var(k.clone()),
+            LamName::Var(i, k) => LamName::Var(i.clone(), k.clone()),
             LamName::Abs(k, a) => LamName::Abs(k.clone(), f(a)),
             LamName::App(a, b) => LamName::App(f(a), f(b)),
         }
