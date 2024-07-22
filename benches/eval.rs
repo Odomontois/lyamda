@@ -98,7 +98,9 @@ fn church() -> Church<IntLam> {
         "x",
         dlam(
             "y",
-            Var("x").app(alt_add.clone().app(Var("y"))).app(zero.clone()),
+            Var("x")
+                .app(alt_add.clone().app(Var("y")))
+                .app(zero.clone()),
         ),
     );
     let to_uint = Box::new(|l: IntLam| l.app(adder(1)).app(Num(0).into()));
@@ -127,4 +129,16 @@ type IntLam = UntypedLamWith<&'static str, UIntExt>;
 
 fn adder(n: u64) -> IntLam {
     Lam::app(Lam::Ext(Op(Add)), Lam::Ext(Num(n)))
+}
+
+#[test]
+fn kek() {
+    let s = dlam(
+        "f",
+        dlam(
+            "g",
+            dlam("x", Var("f").app(Var("x")).app(Var("g").app(Var("x")))),
+        ),
+    );
+    println!("Hello")
 }
